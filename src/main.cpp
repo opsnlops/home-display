@@ -2,15 +2,15 @@
 
 #include <SPI.h>
 #include <SD.h>
-#include <PWMServo.h>
+//#include <PWMServo.h>
 
 #include <creatures.h>
 
 File myFile;
 
-#define FILE_NAME "two.aaw"
+#define FILE_NAME "/two.aaw"
 
-PWMServo servos[2];
+//PWMServo servos[2];
 const int servo0Pin = 9;
 const int servo1Pin = 6;
 
@@ -33,21 +33,33 @@ void config_fail()
 
 bool check_file(File *file)
 {
-  // Make sure the first five bytes are our magic number
-  uint8_t buffer[5];
-  file->readBytes(buffer, 5);
 
-  for (int i = 0; i < 5; i++)
+  // Our magic number is 5 bytes long
+  const uint8_t magic_number_size = 5;
+
+  bool return_code = false;
+
+  // Make sure the first five bytes are our magic number
+  char *buffer = (char *)malloc(sizeof(uint8_t) * magic_number_size);
+
+  file->readBytes(buffer, magic_number_size);
+
+  for (int i = 0; i < magic_number_size; i++)
   {
     if (buffer[i] != MAGIC_NUMBER_ARRAY[i])
     {
       Serial.print("Magic Number fail at position ");
       Serial.println(i);
-      return false;
+      return_code = false;
     }
   }
 
-  return true;
+  // If we made it this far, we're good
+  return_code = true;
+
+  free(buffer);
+
+  return return_code;
 }
 
 // Returns the header from the file
@@ -55,7 +67,7 @@ struct Header read_header(File *file)
 {
   struct Header header;
 
-  file->read(&header, sizeof(struct Header));
+  file->readBytes((char *)&header, sizeof(Header));
 
   Serial.print("number of servos: ");
   Serial.print(header.number_of_servos);
@@ -67,14 +79,14 @@ struct Header read_header(File *file)
   return header;
 }
 
-void play_frame(File *file, uint8_t number_of_servos)
+void play_frame(File *file, size_t number_of_servos)
 {
   uint8_t servo[number_of_servos];
-  file->read(&servo, number_of_servos);
+  file->readBytes((char*)&servo, number_of_servos);
   for (int i = 0; i < number_of_servos; i++)
   {
-    //Serial.println(servo[i]);
-    servos[i].write(servo[i]);
+    Serial.println(servo[i]);
+    //servos[i].write(servo[i]);
   }
 }
 
@@ -90,11 +102,11 @@ void setup()
   }
 
   Serial.println("attaching to servo 0");
-  servos[0].attach(servo0Pin);
+  //servos[0].attach(servo0Pin);
   Serial.println("done");
 
   Serial.println("attaching to servo 1");
-  servos[1].attach(servo1Pin);
+  //servos[1].attach(servo1Pin);
   Serial.println("done");
 
   Serial.print("Initializing SD card...");
@@ -148,6 +160,7 @@ void setup()
     config_fail();
   }
 }
+
 void loop()
 {
   // nothing happens after setup
