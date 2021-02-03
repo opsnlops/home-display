@@ -1,10 +1,28 @@
 
 
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <ESPmDNS.h>
 #include <SPI.h>
 #include <SD.h>
 #include <ESP32Servo.h>
 
 #include <creatures.h>
+#include "secrets.h"
+#include "connection.h"
+
+#define CREATURE_NAME "Sockey"
+
+// WiFi network name and password:
+const char *network_name = WIFI_NETWORK;
+const char *network_password = WIFI_PASSWORD;
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+const char *broker_role = "magic";
+const char *broker_service = "mqtt";
+const char *broker_protocol = "tcp";
 
 File myFile;
 
@@ -82,7 +100,7 @@ struct Header read_header(File *file)
 void play_frame(File *file, size_t number_of_servos)
 {
   uint8_t servo[number_of_servos];
-  file->readBytes((char*)&servo, number_of_servos);
+  file->readBytes((char *)&servo, number_of_servos);
   for (int i = 0; i < number_of_servos; i++)
   {
     Serial.println(servo[i]);
@@ -95,9 +113,9 @@ void setup()
   pinMode(LED_BUILTIN, OUTPUT);
 
   ESP32PWM::allocateTimer(0);
-	ESP32PWM::allocateTimer(1);
-	ESP32PWM::allocateTimer(2);
-	ESP32PWM::allocateTimer(3);
+  ESP32PWM::allocateTimer(1);
+  ESP32PWM::allocateTimer(2);
+  ESP32PWM::allocateTimer(3);
 
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
@@ -115,6 +133,31 @@ void setup()
   servos[1].setPeriodHertz(50);
   servos[1].attach(servo1Pin);
   Serial.println("done");
+
+  // Connect to the WiFi network (see function below loop)
+  connectToWiFi(network_name, network_password);
+  Serial.println("connected to Wifi");
+
+  if (!MDNS.begin(CREATURE_NAME))
+  {
+    Serial.println("Error setting up mDNS responder!");
+    while (1)
+    {
+      delay(1000);
+    }
+  }
+  Serial.println("MDNS set up");
+
+  // We aren't _really_ running something on tcp/666, but this lets me
+  // find the IP of the creature from an mDNS browser
+  MDNS.addService("creature", "tcp", 666);
+  Serial.println("added our fake mDNS service");
+
+  IPAddress broker_ip = find_broker(broker_service, broker_protocol);
+  Serial.println("The IP of the broker is " + broker_ip.toString());
+  client.setServer(broker_ip.toString().c_str(), 1883);
+
+  // Set up the SD ard
 
   Serial.print("Initializing SD card...");
   if (!SD.begin(5))
