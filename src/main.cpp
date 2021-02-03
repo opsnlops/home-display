@@ -2,7 +2,7 @@
 
 #include <SPI.h>
 #include <SD.h>
-//#include <PWMServo.h>
+#include <ESP32Servo.h>
 
 #include <creatures.h>
 
@@ -10,8 +10,8 @@ File myFile;
 
 #define FILE_NAME "/two.aaw"
 
-//PWMServo servos[2];
-const int servo0Pin = 9;
+Servo servos[2];
+const int servo0Pin = 2;
 const int servo1Pin = 6;
 
 // RAWR!
@@ -86,13 +86,18 @@ void play_frame(File *file, size_t number_of_servos)
   for (int i = 0; i < number_of_servos; i++)
   {
     Serial.println(servo[i]);
-    //servos[i].write(servo[i]);
+    servos[i].write(servo[i]);
   }
 }
 
 void setup()
 {
   pinMode(LED_BUILTIN, OUTPUT);
+
+  ESP32PWM::allocateTimer(0);
+	ESP32PWM::allocateTimer(1);
+	ESP32PWM::allocateTimer(2);
+	ESP32PWM::allocateTimer(3);
 
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
@@ -102,11 +107,13 @@ void setup()
   }
 
   Serial.println("attaching to servo 0");
-  //servos[0].attach(servo0Pin);
+  servos[0].setPeriodHertz(50);
+  servos[0].attach(servo0Pin);
   Serial.println("done");
 
   Serial.println("attaching to servo 1");
-  //servos[1].attach(servo1Pin);
+  servos[1].setPeriodHertz(50);
+  servos[1].attach(servo1Pin);
   Serial.println("done");
 
   Serial.print("Initializing SD card...");
