@@ -1,10 +1,18 @@
-
+// This isn't gonna work on anything but an ESP32
+#if !(defined(ESP8266) || defined(ESP32))
+#error This code is intended to run only on the ESP8266 and ESP32 boards
+#endif
 
 #include <WiFi.h>
-#include <PubSubClient.h>
-#include <ESPmDNS.h>
-#include <SPI.h>
-#include <SD.h>
+extern "C"
+{
+#include "freertos/FreeRTOS.h"
+#include "freertos/timers.h"
+}
+#include <AsyncMqttClient.h>
+
+//#include <SPI.h>
+//#include <SD.h>
 #include <ESP32Servo.h>
 
 #include <creatures.h>
@@ -12,25 +20,31 @@
 #include "connection.h"
 
 #define CREATURE_NAME "Sockey"
+#define CREATURE_TOPIC "creatures/sockey"
+
+AsyncMqttClient mqttClient;
+TimerHandle_t mqttReconnectTimer;
+TimerHandle_t wifiReconnectTimer;
+
+IPAddress mqtt_broker_address = IPAddress(192, 168, 7, 129);
+uint16_t mqtt_broker_port = 1883;
 
 // WiFi network name and password:
 const char *network_name = WIFI_NETWORK;
 const char *network_password = WIFI_PASSWORD;
 
-WiFiClient espClient;
-PubSubClient client(espClient);
-
 const char *broker_role = "magic";
 const char *broker_service = "mqtt";
 const char *broker_protocol = "tcp";
 
-File myFile;
+//File myFile;
 
 #define FILE_NAME "/two.aaw"
 
-Servo servos[2];
-const int servo0Pin = 2;
-const int servo1Pin = 6;
+// We need to use ADC1. ADC2 is used by the Wifi. (Pins GPIO32-GPIO39)
+//Servo servos[2];
+//const int servo0Pin = 32;
+//const int servo1Pin = 33;
 
 // RAWR!
 uint8_t MAGIC_NUMBER_ARRAY[5] = {0x52, 0x41, 0x57, 0x52, 0x21};
@@ -49,6 +63,7 @@ void config_fail()
   }
 }
 
+/*
 bool check_file(File *file)
 {
 
@@ -107,6 +122,111 @@ void play_frame(File *file, size_t number_of_servos)
     servos[i].write(servo[i]);
   }
 }
+*/
+
+void connectToMqtt()
+{
+  Serial.println("Connecting to MQTT...");
+  mqttClient.connect();
+}
+
+void connect_wifi()
+{
+  connectToWiFi();
+}
+
+void WiFiEvent(WiFiEvent_t event)
+{
+  Serial.printf("[WiFi-event] event: %d\n", event);
+  switch (event)
+  {
+  case SYSTEM_EVENT_STA_GOT_IP:
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+    connectToMqtt();
+    break;
+  case SYSTEM_EVENT_STA_DISCONNECTED:
+    Serial.println("WiFi lost connection");
+    xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
+    xTimerStart(wifiReconnectTimer, 0);
+    break;
+  }
+}
+
+void onMqttConnect(bool sessionPresent)
+{
+  Serial.println("Connected to MQTT.");
+  Serial.print("Session present: ");
+  Serial.println(sessionPresent);
+
+  uint16_t packetIdSub = mqttClient.subscribe("#", 2);
+  Serial.print("Subscribing at QoS 2, packetId: ");
+  Serial.println(packetIdSub);
+
+  mqttClient.publish(CREATURE_TOPIC, 0, true, "test 1");
+  Serial.println("Publishing at QoS 0");
+  uint16_t packetIdPub1 = mqttClient.publish(CREATURE_TOPIC, 1, true, "test 2");
+  Serial.print("Publishing at QoS 1, packetId: ");
+  Serial.println(packetIdPub1);
+  uint16_t packetIdPub2 = mqttClient.publish(CREATURE_TOPIC, 2, true, "test 3");
+  Serial.print("Publishing at QoS 2, packetId: ");
+  Serial.println(packetIdPub2);
+}
+
+void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
+{
+  Serial.println("Disconnected from MQTT.");
+
+  if (WiFi.isConnected())
+  {
+    xTimerStart(mqttReconnectTimer, 0);
+  }
+}
+
+void onMqttSubscribe(uint16_t packetId, uint8_t qos)
+{
+  Serial.println("Subscribe acknowledged.");
+  Serial.print("  packetId: ");
+  Serial.println(packetId);
+  Serial.print("  qos: ");
+  Serial.println(qos);
+}
+
+void onMqttUnsubscribe(uint16_t packetId)
+{
+  Serial.println("Unsubscribe acknowledged.");
+  Serial.print("  packetId: ");
+  Serial.println(packetId);
+}
+
+void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
+{
+  Serial.println("Publish received.");
+  Serial.print("  topic: ");
+  Serial.println(topic);
+  Serial.print("  payload: ");
+  Serial.println(payload);
+  Serial.print("  qos: ");
+  Serial.println(properties.qos);
+  Serial.print("  dup: ");
+  Serial.println(properties.dup);
+  Serial.print("  retain: ");
+  Serial.println(properties.retain);
+  Serial.print("  len: ");
+  Serial.println(len);
+  Serial.print("  index: ");
+  Serial.println(index);
+  Serial.print("  total: ");
+  Serial.println(total);
+}
+
+void onMqttPublish(uint16_t packetId)
+{
+  Serial.println("Publish acknowledged.");
+  Serial.print("  packetId: ");
+  Serial.println(packetId);
+}
 
 void setup()
 {
@@ -120,44 +240,59 @@ void setup()
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
   while (!Serial)
-  {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
+    ;
+  delay(200);
 
-  Serial.println("attaching to servo 0");
-  servos[0].setPeriodHertz(50);
-  servos[0].attach(servo0Pin);
-  Serial.println("done");
+  //Serial.println("attaching to servo 0");
+  //servos[0].setPeriodHertz(50);
+  //servos[0].attach(servo0Pin);
+  //Serial.println("done");
 
-  Serial.println("attaching to servo 1");
-  servos[1].setPeriodHertz(50);
-  servos[1].attach(servo1Pin);
-  Serial.println("done");
+  //Serial.println("attaching to servo 1");
+  //servos[1].setPeriodHertz(50);
+  //servos[1].attach(servo1Pin);
+  //Serial.println("done");
 
   // Connect to the WiFi network (see function below loop)
-  connectToWiFi(network_name, network_password);
-  Serial.println("connected to Wifi");
+  //connectToWiFi(network_name, network_password);
+  //Serial.println("connected to Wifi");
 
-  if (!MDNS.begin(CREATURE_NAME))
-  {
-    Serial.println("Error setting up mDNS responder!");
-    while (1)
-    {
-      delay(1000);
-    }
-  }
-  Serial.println("MDNS set up");
+  //if (!MDNS.begin(CREATURE_NAME))
+  //{
+  //  Serial.println("Error setting up mDNS responder!");
+  //  while (1)
+  //  {
+  //    delay(1000);
+  //  }
+  //}
+  //Serial.println("MDNS set up");
 
   // We aren't _really_ running something on tcp/666, but this lets me
   // find the IP of the creature from an mDNS browser
-  MDNS.addService("creature", "tcp", 666);
-  Serial.println("added our fake mDNS service");
+  //MDNS.addService("creature", "tcp", 666);
+  //Serial.println("added our fake mDNS service");
 
-  IPAddress broker_ip = find_broker(broker_service, broker_protocol);
-  Serial.println("The IP of the broker is " + broker_ip.toString());
-  client.setServer(broker_ip.toString().c_str(), 1883);
+  //IPAddress mqtt_broker_address = find_broker(broker_service, broker_protocol);
+  //Serial.println("The IP of the broker is " + mqtt_broker_address.toString());
 
-  // Set up the SD ard
+  mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
+  wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connect_wifi));
+
+  WiFi.onEvent(WiFiEvent);
+
+  mqttClient.onConnect(onMqttConnect);
+  mqttClient.onDisconnect(onMqttDisconnect);
+  mqttClient.onSubscribe(onMqttSubscribe);
+  mqttClient.onUnsubscribe(onMqttUnsubscribe);
+  mqttClient.onMessage(onMqttMessage);
+  mqttClient.onPublish(onMqttPublish);
+  mqttClient.setServer(mqtt_broker_address, mqtt_broker_port);
+
+  connect_wifi();
+
+  /*
+  // Set up the SD card
+
 
   Serial.print("Initializing SD card...");
   if (!SD.begin(5))
@@ -209,6 +344,7 @@ void setup()
     Serial.println(FILE_NAME);
     config_fail();
   }
+  */
 }
 
 void loop()
