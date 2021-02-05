@@ -11,8 +11,8 @@ extern "C"
 }
 #include <AsyncMqttClient.h>
 
-//#include <SPI.h>
-//#include <SD.h>
+#include <SPI.h>
+#include <SD.h>
 #include <ESP32Servo.h>
 
 #include <creatures.h>
@@ -26,7 +26,7 @@ AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
 TimerHandle_t wifiReconnectTimer;
 
-IPAddress mqtt_broker_address = IPAddress(192, 168, 7, 129);
+IPAddress mqtt_broker_address = default_ip_address;
 uint16_t mqtt_broker_port = 1883;
 
 // WiFi network name and password:
@@ -37,14 +37,14 @@ const char *broker_role = "magic";
 const char *broker_service = "mqtt";
 const char *broker_protocol = "tcp";
 
-//File myFile;
+File myFile;
 
 #define FILE_NAME "/two.aaw"
 
 // We need to use ADC1. ADC2 is used by the Wifi. (Pins GPIO32-GPIO39)
-//Servo servos[2];
-//const int servo0Pin = 32;
-//const int servo1Pin = 33;
+Servo servos[2];
+const int servo0Pin = 32;
+const int servo1Pin = 33;
 
 // RAWR!
 uint8_t MAGIC_NUMBER_ARRAY[5] = {0x52, 0x41, 0x57, 0x52, 0x21};
@@ -63,7 +63,6 @@ void config_fail()
   }
 }
 
-/*
 bool check_file(File *file)
 {
 
@@ -122,10 +121,19 @@ void play_frame(File *file, size_t number_of_servos)
     servos[i].write(servo[i]);
   }
 }
-*/
 
 void connectToMqtt()
 {
+
+  // Make sure we have a broker
+  while (mqtt_broker_address == default_ip_address)
+  {
+    mqtt_broker_address = find_broker(broker_service, broker_protocol);
+    Serial.println("The IP of the broker is " + mqtt_broker_address.toString());
+  }
+
+  mqttClient.setServer(mqtt_broker_address, mqtt_broker_port);
+
   Serial.println("Connecting to MQTT...");
   mqttClient.connect();
 }
@@ -202,11 +210,24 @@ void onMqttUnsubscribe(uint16_t packetId)
 
 void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
 {
-  Serial.println("Publish received.");
+
+  char payload_string[len];
+  memcpy(payload_string, payload, len);
+
+  int size = sizeof(payload_string) / sizeof(payload_string[0]);
+  Serial.print("\n\npayload length: ");
+  Serial.println(size);
+
+  //for (int i = 0; i < size; i++)
+  //{
+  //  Serial.println(payload_string[i]);
+ // }
+
+  Serial.println("Message received:");
   Serial.print("  topic: ");
   Serial.println(topic);
   Serial.print("  payload: ");
-  Serial.println(payload);
+  Serial.println(payload_string);
   Serial.print("  qos: ");
   Serial.println(properties.qos);
   Serial.print("  dup: ");
@@ -243,37 +264,30 @@ void setup()
     ;
   delay(200);
 
-  //Serial.println("attaching to servo 0");
-  //servos[0].setPeriodHertz(50);
-  //servos[0].attach(servo0Pin);
-  //Serial.println("done");
+  Serial.println("attaching to servo 0");
+  servos[0].setPeriodHertz(50);
+  servos[0].attach(servo0Pin);
+  Serial.println("done");
 
-  //Serial.println("attaching to servo 1");
-  //servos[1].setPeriodHertz(50);
-  //servos[1].attach(servo1Pin);
-  //Serial.println("done");
+  Serial.println("attaching to servo 1");
+  servos[1].setPeriodHertz(50);
+  servos[1].attach(servo1Pin);
+  Serial.println("done");
 
-  // Connect to the WiFi network (see function below loop)
-  //connectToWiFi(network_name, network_password);
-  //Serial.println("connected to Wifi");
-
-  //if (!MDNS.begin(CREATURE_NAME))
-  //{
-  //  Serial.println("Error setting up mDNS responder!");
-  //  while (1)
-  //  {
-  //    delay(1000);
-  //  }
-  //}
-  //Serial.println("MDNS set up");
+  if (!MDNS.begin(CREATURE_NAME))
+  {
+    Serial.println("Error setting up mDNS responder!");
+    while (1)
+    {
+      delay(1000);
+    }
+  }
+  Serial.println("MDNS set up");
 
   // We aren't _really_ running something on tcp/666, but this lets me
   // find the IP of the creature from an mDNS browser
-  //MDNS.addService("creature", "tcp", 666);
-  //Serial.println("added our fake mDNS service");
-
-  //IPAddress mqtt_broker_address = find_broker(broker_service, broker_protocol);
-  //Serial.println("The IP of the broker is " + mqtt_broker_address.toString());
+  MDNS.addService("creature", "tcp", 666);
+  Serial.println("added our fake mDNS service");
 
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
   wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connect_wifi));
@@ -286,7 +300,6 @@ void setup()
   mqttClient.onUnsubscribe(onMqttUnsubscribe);
   mqttClient.onMessage(onMqttMessage);
   mqttClient.onPublish(onMqttPublish);
-  mqttClient.setServer(mqtt_broker_address, mqtt_broker_port);
 
   connect_wifi();
 

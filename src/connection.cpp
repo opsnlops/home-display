@@ -10,7 +10,7 @@
 #include "connection.h"
 #include "secrets.h"
 
-const int LED_PIN = 5;
+const int LED_PIN = LED_BUILTIN;
 
 #define MAX_CONNECTION_ATTEMPTS 50
 
@@ -24,28 +24,6 @@ void connectToWiFi()
     Serial.print("...");
 
     WiFi.begin(WIFI_NETWORK, WIFI_PASSWORD);
-
-    /*int connection_attempts = 0;
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        // Blink LED while we're connecting:
-        digitalWrite(LED_PIN, ledState);
-        ledState = (ledState + 1) % 2; // Flip ledState
-        delay(150);
-        Serial.print(".");
-
-        if (connection_attempts++ > (int)MAX_CONNECTION_ATTEMPTS)
-        {
-            Serial.println("unable to connect, giving up...");
-            signal_conenction_error();
-        }
-    }
-
-    Serial.println();
-    Serial.println("WiFi connected!");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-    */
 }
 
 /**

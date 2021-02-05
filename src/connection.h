@@ -5,6 +5,9 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 
+
+const IPAddress default_ip_address = IPAddress(0,0,0,0);
+
 void connectToWiFi();
 void signal_conenction_error();
 
