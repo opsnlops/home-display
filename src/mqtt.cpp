@@ -2,9 +2,9 @@
 
 #include <AsyncMqttClient.h>
 
-#include "creature.h"
-#include "connection.h"
-#include "mqtt.h"
+#include "creature.hpp"
+#include "connection.hpp"
+#include "mqtt.hpp"
 
 const char *broker_role = "magic";
 const char *broker_service = "mqtt";

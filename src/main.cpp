@@ -18,10 +18,10 @@ extern "C"
 #include <ESP32Servo.h>
 
 #include <creatures.h>
-#include "creature.h"
+#include "creature.hpp"
 #include "secrets.h"
-#include "mqtt.h"
-#include "connection.h"
+#include "mqtt.hpp"
+#include "connection.hpp"
 
 
 extern AsyncMqttClient mqttClient;
@@ -30,9 +30,6 @@ TimerHandle_t wifiReconnectTimer;
 
 
 
-// WiFi network name and password:
-const char *network_name = WIFI_NETWORK;
-const char *network_password = WIFI_PASSWORD;
 
 
 
