@@ -11,7 +11,7 @@ const char *broker_service = "mqtt";
 const char *broker_protocol = "tcp";
 
 IPAddress mqtt_broker_address = DEFAULT_IP_ADDRESS;
-uint16_t mqtt_broker_port = 1883;
+uint16_t mqtt_broker_port = DEFAULT_MQTT_PORT;
 
 AsyncMqttClient mqttClient;
 

@@ -15,9 +15,6 @@ const int LED_PIN = LED_BUILTIN;
 
 void connectToWiFi()
 {
-
-    int ledState = 0;
-
     Serial.print("Connecting to WiFi network: ");
     Serial.print(WIFI_NETWORK);
     Serial.print("...");
