@@ -3,6 +3,8 @@
 #error This code is intended to run only on the ESP8266 and ESP32 boards
 #endif
 
+#include <Arduino.h>
+
 #include <WiFi.h>
 extern "C"
 {
@@ -16,26 +18,23 @@ extern "C"
 #include <ESP32Servo.h>
 
 #include <creatures.h>
+#include "creature.h"
 #include "secrets.h"
+#include "mqtt.h"
 #include "connection.h"
 
-#define CREATURE_NAME "Sockey"
-#define CREATURE_TOPIC "creatures/sockey"
 
-AsyncMqttClient mqttClient;
+extern AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
 TimerHandle_t wifiReconnectTimer;
 
-IPAddress mqtt_broker_address = default_ip_address;
-uint16_t mqtt_broker_port = 1883;
+
 
 // WiFi network name and password:
 const char *network_name = WIFI_NETWORK;
 const char *network_password = WIFI_PASSWORD;
 
-const char *broker_role = "magic";
-const char *broker_service = "mqtt";
-const char *broker_protocol = "tcp";
+
 
 File myFile;
 
@@ -122,21 +121,7 @@ void play_frame(File *file, size_t number_of_servos)
   }
 }
 
-void connectToMqtt()
-{
 
-  // Make sure we have a broker
-  while (mqtt_broker_address == default_ip_address)
-  {
-    mqtt_broker_address = find_broker(broker_service, broker_protocol);
-    Serial.println("The IP of the broker is " + mqtt_broker_address.toString());
-  }
-
-  mqttClient.setServer(mqtt_broker_address, mqtt_broker_port);
-
-  Serial.println("Connecting to MQTT...");
-  mqttClient.connect();
-}
 
 void connect_wifi()
 {
@@ -162,96 +147,12 @@ void WiFiEvent(WiFiEvent_t event)
   }
 }
 
-void onMqttConnect(bool sessionPresent)
-{
-  Serial.println("Connected to MQTT.");
-  Serial.print("Session present: ");
-  Serial.println(sessionPresent);
 
-  uint16_t packetIdSub = mqttClient.subscribe("#", 2);
-  Serial.print("Subscribing at QoS 2, packetId: ");
-  Serial.println(packetIdSub);
-
-  mqttClient.publish(CREATURE_TOPIC, 0, true, "test 1");
-  Serial.println("Publishing at QoS 0");
-  uint16_t packetIdPub1 = mqttClient.publish(CREATURE_TOPIC, 1, true, "test 2");
-  Serial.print("Publishing at QoS 1, packetId: ");
-  Serial.println(packetIdPub1);
-  uint16_t packetIdPub2 = mqttClient.publish(CREATURE_TOPIC, 2, true, "test 3");
-  Serial.print("Publishing at QoS 2, packetId: ");
-  Serial.println(packetIdPub2);
-}
-
-void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
-{
-  Serial.println("Disconnected from MQTT.");
-
-  if (WiFi.isConnected())
-  {
-    xTimerStart(mqttReconnectTimer, 0);
-  }
-}
-
-void onMqttSubscribe(uint16_t packetId, uint8_t qos)
-{
-  Serial.println("Subscribe acknowledged.");
-  Serial.print("  packetId: ");
-  Serial.println(packetId);
-  Serial.print("  qos: ");
-  Serial.println(qos);
-}
-
-void onMqttUnsubscribe(uint16_t packetId)
-{
-  Serial.println("Unsubscribe acknowledged.");
-  Serial.print("  packetId: ");
-  Serial.println(packetId);
-}
-
-void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
-{
-
-  char payload_string[len];
-  memcpy(payload_string, payload, len);
-
-  int size = sizeof(payload_string) / sizeof(payload_string[0]);
-  Serial.print("\n\npayload length: ");
-  Serial.println(size);
-
-  //for (int i = 0; i < size; i++)
-  //{
-  //  Serial.println(payload_string[i]);
- // }
-
-  Serial.println("Message received:");
-  Serial.print("  topic: ");
-  Serial.println(topic);
-  Serial.print("  payload: ");
-  Serial.println(payload_string);
-  Serial.print("  qos: ");
-  Serial.println(properties.qos);
-  Serial.print("  dup: ");
-  Serial.println(properties.dup);
-  Serial.print("  retain: ");
-  Serial.println(properties.retain);
-  Serial.print("  len: ");
-  Serial.println(len);
-  Serial.print("  index: ");
-  Serial.println(index);
-  Serial.print("  total: ");
-  Serial.println(total);
-}
-
-void onMqttPublish(uint16_t packetId)
-{
-  Serial.println("Publish acknowledged.");
-  Serial.print("  packetId: ");
-  Serial.println(packetId);
-}
 
 void setup()
 {
   pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
 
   ESP32PWM::allocateTimer(0);
   ESP32PWM::allocateTimer(1);
@@ -262,7 +163,8 @@ void setup()
   Serial.begin(9600);
   while (!Serial)
     ;
-  delay(200);
+  // Nice long delay to let minicom start
+  delay(5000);
 
   Serial.println("attaching to servo 0");
   servos[0].setPeriodHertz(50);
@@ -302,6 +204,7 @@ void setup()
   mqttClient.onPublish(onMqttPublish);
 
   connect_wifi();
+  digitalWrite(LED_BUILTIN, LOW);
 
   /*
   // Set up the SD card
