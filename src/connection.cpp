@@ -12,7 +12,6 @@
 
 const int LED_PIN = LED_BUILTIN;
 
-#define MAX_CONNECTION_ATTEMPTS 50
 
 void connectToWiFi()
 {
@@ -29,7 +28,7 @@ void connectToWiFi()
 /**
  * This tosses SOS onto the internal LED. It's a dead loop, and means we couldn't connect.
  */
-void signal_conenction_error()
+void signal_sos()
 {
     while (true)
     {
@@ -108,5 +107,5 @@ IPAddress find_broker(const char *broker_service, const char *broker_protocol)
     }
 
     // This shouldn't happen, but provide a safe default
-    return IPAddress().fromString("127.0.0.1");
+    return DEFAULT_IP_ADDRESS;
 }

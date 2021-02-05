@@ -23,15 +23,9 @@ extern "C"
 #include "mqtt.hpp"
 #include "connection.hpp"
 
-
 extern AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
 TimerHandle_t wifiReconnectTimer;
-
-
-
-
-
 
 File myFile;
 
@@ -118,13 +112,6 @@ void play_frame(File *file, size_t number_of_servos)
   }
 }
 
-
-
-void connect_wifi()
-{
-  connectToWiFi();
-}
-
 void WiFiEvent(WiFiEvent_t event)
 {
   Serial.printf("[WiFi-event] event: %d\n", event);
@@ -140,11 +127,10 @@ void WiFiEvent(WiFiEvent_t event)
     Serial.println("WiFi lost connection");
     xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
     xTimerStart(wifiReconnectTimer, 0);
+    onWifiDisconnect();
     break;
   }
 }
-
-
 
 void setup()
 {
@@ -189,7 +175,7 @@ void setup()
   Serial.println("added our fake mDNS service");
 
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
-  wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connect_wifi));
+  wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
 
   WiFi.onEvent(WiFiEvent);
 
@@ -200,7 +186,7 @@ void setup()
   mqttClient.onMessage(onMqttMessage);
   mqttClient.onPublish(onMqttPublish);
 
-  connect_wifi();
+  connectToWiFi();
   digitalWrite(LED_BUILTIN, LOW);
 
   /*

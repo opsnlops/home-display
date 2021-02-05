@@ -59,6 +59,9 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
 {
   Serial.println("Disconnected from MQTT.");
 
+  // Reset the broker to the default
+  mqtt_broker_address = DEFAULT_IP_ADDRESS;
+
   if (WiFi.isConnected())
   {
     xTimerStart(mqttReconnectTimer, 0);
@@ -123,4 +126,10 @@ void onMqttPublish(uint16_t packetId)
   Serial.println("Publish acknowledged.");
   Serial.print("  packetId: ");
   Serial.println(packetId);
+}
+
+void onWifiDisconnect()
+{
+  // Reset the broker IP so we try to find it next time
+  mqtt_broker_address = DEFAULT_IP_ADDRESS;
 }
