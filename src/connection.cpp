@@ -7,7 +7,7 @@
 
 #include <WiFi.h>
 
-#include "connection.hpp"
+#include "connection.h"
 #include "secrets.h"
 
 const int LED_PIN = LED_BUILTIN;

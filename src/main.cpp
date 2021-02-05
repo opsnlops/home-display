@@ -18,10 +18,10 @@ extern "C"
 #include <ESP32Servo.h>
 
 #include <creatures.h>
-#include "creature.hpp"
+#include "creature.h"
 #include "secrets.h"
-#include "mqtt.hpp"
-#include "connection.hpp"
+#include "mqtt.h"
+#include "connection.h"
 
 extern AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
