@@ -41,7 +41,7 @@ void onMqttConnect(bool sessionPresent)
   Serial.print("Session present: ");
   Serial.println(sessionPresent);
 
-  uint16_t packetIdSub = mqttClient.subscribe("#", 2);
+  uint16_t packetIdSub = mqttClient.subscribe("external/secondlife/concurrency", 2);
   Serial.print("Subscribing at QoS 2, packetId: ");
   Serial.println(packetIdSub);
 
@@ -84,42 +84,7 @@ void onMqttUnsubscribe(uint16_t packetId)
   Serial.println(packetId);
 }
 
-void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
-{
-  digitalWrite(LED_BUILTIN, HIGH);
 
-  char payload_string[len];
-  memcpy(payload_string, payload, len);
-
-  int size = sizeof(payload_string) / sizeof(payload_string[0]);
-  Serial.print("\n\npayload length: ");
-  Serial.println(size);
-
-  //for (int i = 0; i < size; i++)
-  //{
-  //  Serial.println(payload_string[i]);
-  // }
-
-  Serial.println("Message received:");
-  Serial.print("  topic: ");
-  Serial.println(topic);
-  Serial.print("  payload: ");
-  Serial.println(payload_string);
-  Serial.print("  qos: ");
-  Serial.println(properties.qos);
-  Serial.print("  dup: ");
-  Serial.println(properties.dup);
-  Serial.print("  retain: ");
-  Serial.println(properties.retain);
-  Serial.print("  len: ");
-  Serial.println(len);
-  Serial.print("  index: ");
-  Serial.println(index);
-  Serial.print("  total: ");
-  Serial.println(total);
-
-  digitalWrite(LED_BUILTIN, LOW);
-}
 
 void onMqttPublish(uint16_t packetId)
 {

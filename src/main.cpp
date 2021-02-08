@@ -16,6 +16,7 @@ extern "C"
 #include <SPI.h>
 #include <SD.h>
 #include <ESP32Servo.h>
+#include <LiquidCrystal.h>
 
 #include <creatures.h>
 #include "creature.h"
@@ -30,6 +31,9 @@ TimerHandle_t wifiReconnectTimer;
 File myFile;
 
 #define FILE_NAME "/two.aaw"
+
+const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 // We need to use ADC1. ADC2 is used by the Wifi. (Pins GPIO32-GPIO39)
 Servo servos[2];
@@ -84,6 +88,15 @@ bool check_file(File *file)
   return return_code;
 }
 
+void update_lcd(String top_line, String bottom_line)
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(top_line);
+  lcd.setCursor(0, 1);
+  lcd.print(bottom_line);
+}
+
 // Returns the header from the file
 struct Header read_header(File *file)
 {
@@ -132,6 +145,16 @@ void WiFiEvent(WiFiEvent_t event)
   }
 }
 
+
+
+void set_up_lcd()
+{
+  const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
+  lcd = LiquidCrystal(rs, en, d4, d5, d6, d7);
+  lcd.begin(16, 2);
+  update_lcd("Hello, world!", "This is neato!");
+}
+
 void setup()
 {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -148,6 +171,8 @@ void setup()
     ;
   // Nice long delay to let minicom start
   delay(5000);
+
+  set_up_lcd();
 
   Serial.println("attaching to servo 0");
   servos[0].setPeriodHertz(50);
@@ -189,9 +214,7 @@ void setup()
   connectToWiFi();
   digitalWrite(LED_BUILTIN, LOW);
 
-  /*
   // Set up the SD card
-
 
   Serial.print("Initializing SD card...");
   if (!SD.begin(5))
@@ -221,7 +244,7 @@ void setup()
       uint8_t command = myFile.read();
       if (command == (uint8_t)MOVEMENT_FRAME_TYPE)
       {
-        play_frame(&myFile, header.number_of_servos);
+        //play_frame(&myFile, header.number_of_servos);
         delay(header.time_per_frame);
       }
 
@@ -243,8 +266,47 @@ void setup()
     Serial.println(FILE_NAME);
     config_fail();
   }
-  */
 }
+
+void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
+{
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  char payload_string[len];
+  memcpy(payload_string, payload, len);
+
+  int size = sizeof(payload_string) / sizeof(payload_string[0]);
+  Serial.print("\n\npayload length: ");
+  Serial.println(size);
+
+  //for (int i = 0; i < size; i++)
+  //{
+  //  Serial.println(payload_string[i]);
+  // }
+
+  update_lcd(String(payload), "");
+
+  Serial.println("Message received:");
+  Serial.print("  topic: ");
+  Serial.println(topic);
+  Serial.print("  payload: ");
+  Serial.println(payload_string);
+  Serial.print("  qos: ");
+  Serial.println(properties.qos);
+  Serial.print("  dup: ");
+  Serial.println(properties.dup);
+  Serial.print("  retain: ");
+  Serial.println(properties.retain);
+  Serial.print("  len: ");
+  Serial.println(len);
+  Serial.print("  index: ");
+  Serial.println(index);
+  Serial.print("  total: ");
+  Serial.println(total);
+
+  digitalWrite(LED_BUILTIN, LOW);
+}
+
 
 void loop()
 {
