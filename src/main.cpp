@@ -145,8 +145,6 @@ void WiFiEvent(WiFiEvent_t event)
   }
 }
 
-
-
 void set_up_lcd()
 {
   const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
@@ -174,15 +172,15 @@ void setup()
 
   set_up_lcd();
 
-  Serial.println("attaching to servo 0");
-  servos[0].setPeriodHertz(50);
-  servos[0].attach(servo0Pin);
-  Serial.println("done");
+  //Serial.println("attaching to servo 0");
+  //servos[0].setPeriodHertz(50);
+  //servos[0].attach(servo0Pin);
+  //Serial.println("done");
 
-  Serial.println("attaching to servo 1");
-  servos[1].setPeriodHertz(50);
-  servos[1].attach(servo1Pin);
-  Serial.println("done");
+  //Serial.println("attaching to servo 1");
+  //servos[1].setPeriodHertz(50);
+  //servos[1].attach(servo1Pin);
+  //Serial.println("done");
 
   if (!MDNS.begin(CREATURE_NAME))
   {
@@ -272,19 +270,12 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
 {
   digitalWrite(LED_BUILTIN, HIGH);
 
-  char payload_string[len];
+  // Annoyingly, payload isn't NUL terminated
+  char payload_string[len + 1];
+  memset(payload_string, '\0', len + 1);
   memcpy(payload_string, payload, len);
 
-  int size = sizeof(payload_string) / sizeof(payload_string[0]);
-  Serial.print("\n\npayload length: ");
-  Serial.println(size);
-
-  //for (int i = 0; i < size; i++)
-  //{
-  //  Serial.println(payload_string[i]);
-  // }
-
-  update_lcd(String(payload), "");
+  update_lcd(String(payload_string), "");
 
   Serial.println("Message received:");
   Serial.print("  topic: ");
@@ -306,7 +297,6 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
 
   digitalWrite(LED_BUILTIN, LOW);
 }
-
 
 void loop()
 {
