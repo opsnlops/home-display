@@ -270,7 +270,8 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
 {
   digitalWrite(LED_BUILTIN, HIGH);
 
-  // Annoyingly, payload isn't NUL terminated
+  // MQTT allows binary content to be passed, so payload will arrive without a
+  // NUL at the end. Let's add one so we can print it out properly!
   char payload_string[len + 1];
   memset(payload_string, '\0', len + 1);
   memcpy(payload_string, payload, len);
