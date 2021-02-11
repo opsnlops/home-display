@@ -33,16 +33,6 @@ const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 
-void config_fail()
-{
-  while (true)
-  {
-    digitalWrite(LED_BUILTIN, HIGH); // turn the LED on (HIGH is the voltage level)
-    delay(100);                      // wait for a second
-    digitalWrite(LED_BUILTIN, LOW);  // turn the LED off by making the voltage LOW
-    delay(100);                      // wait for a second
-  }
-}
 
 void update_lcd(String top_line, String bottom_line)
 {
