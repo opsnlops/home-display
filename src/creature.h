@@ -6,5 +6,4 @@
 #define CREATURE_NAME "home-display"
 #define CREATURE_TOPIC "creatures/home-display"
 
-
 #endif

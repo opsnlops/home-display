@@ -69,7 +69,7 @@ void set_up_lcd()
   const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
   lcd = LiquidCrystal(rs, en, d4, d5, d6, d7);
   lcd.begin(16, 2);
-  update_lcd("Hello, world!", "This is neato!");
+  update_lcd(CREATURE_NAME, "Starting up...");
 }
 
 void setup()
