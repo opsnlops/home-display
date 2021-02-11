@@ -41,9 +41,24 @@ void onMqttConnect(bool sessionPresent)
   Serial.print("Session present: ");
   Serial.println(sessionPresent);
 
-  uint16_t packetIdSub = mqttClient.subscribe("external/secondlife/concurrency", 2);
-  Serial.print("Subscribing at QoS 2, packetId: ");
-  Serial.println(packetIdSub);
+  // What topics do we care about?
+  mqttClient.subscribe(SL_CONNCURRENCY_TOPIC, 0);
+
+  mqttClient.subscribe(BATHROOM_MOTION_TOPIC, 2);
+  mqttClient.subscribe(BEDROOM_MOTION_TOPIC, 2);
+  mqttClient.subscribe(OFFICE_MOTION_TOPIC, 2);
+  mqttClient.subscribe(LAUNDRY_ROOM_MOTION_TOPIC, 2);
+  mqttClient.subscribe(LIVING_ROOM_MOTION_TOPIC, 2);
+  mqttClient.subscribe(WORKSHOP_MOTION_TOPIC, 2);
+
+  mqttClient.subscribe(BATHROOM_TEMPERATURE_TOPIC, 0);
+  mqttClient.subscribe(BEDROOM_TEMPERATURE_TOPIC, 0);
+  mqttClient.subscribe(OFFICE_TEMPERATURE_TOPIC, 0);
+  mqttClient.subscribe(LAUNDRY_ROOM_TEMPERATURE_TOPIC, 0);
+  mqttClient.subscribe(LIVING_ROOM_TEMPERATURE_TOPIC, 0);
+  mqttClient.subscribe(WORKSHOP_TEMPERATURE_TOPIC, 0);
+
+  mqttClient.subscribe(OUTSIDE_TEMPERATURE_TOPIC, 0);
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
@@ -74,8 +89,6 @@ void onMqttUnsubscribe(uint16_t packetId)
   Serial.print("  packetId: ");
   Serial.println(packetId);
 }
-
-
 
 void onMqttPublish(uint16_t packetId)
 {
