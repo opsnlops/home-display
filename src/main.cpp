@@ -1,6 +1,6 @@
 // This isn't gonna work on anything but an ESP32
-#if !(defined(ESP8266) || defined(ESP32))
-#error This code is intended to run only on the ESP8266 and ESP32 boards
+#if !defined(ESP32)
+#error This code is intended to run only on the ESP32 board
 #endif
 
 #include <Arduino.h>
@@ -15,7 +15,6 @@ extern "C"
 
 #include <SPI.h>
 #include <SD.h>
-#include <ESP32Servo.h>
 #include <LiquidCrystal.h>
 #include "time.h"
 
@@ -29,12 +28,10 @@ extern AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
 TimerHandle_t wifiReconnectTimer;
 
-
 const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
-
-
+// Clear the entire LCD and print a message
 void paint_lcd(String top_line, String bottom_line)
 {
   lcd.clear();
@@ -43,7 +40,6 @@ void paint_lcd(String top_line, String bottom_line)
   lcd.setCursor(0, 1);
   lcd.print(bottom_line);
 }
-
 
 void WiFiEvent(WiFiEvent_t event)
 {
@@ -73,6 +69,7 @@ void set_up_lcd()
   lcd = LiquidCrystal(rs, en, d4, d5, d6, d7);
   lcd.begin(16, 2);
   paint_lcd(CREATURE_NAME, "Starting up...");
+  delay(1000);
 }
 
 void setup()
@@ -88,7 +85,6 @@ void setup()
   delay(5000);
 
   set_up_lcd();
-
 
   if (!MDNS.begin(CREATURE_NAME))
   {
@@ -121,68 +117,185 @@ void setup()
   digitalWrite(LED_BUILTIN, LOW);
 
   // TODO: Remove this, don't talk to the Internet
-  const char* ntpServer = "pool.ntp.org";
-  const long  gmtOffset_sec = -28800;
-  const int   daylightOffset_sec = 3600;
+  const char *ntpServer = "pool.ntp.org";
+  const long gmtOffset_sec = -28800;
+  const int daylightOffset_sec = 3600;
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
 }
 
 // Stolen from StackOverflow
 char *ultoa(unsigned long val, char *s)
 {
-    char *p = s + 13;
-    *p = '\0';
-    do {
-        if ((p - s) % 4 == 2)
-            *--p = ',';
-        *--p = '0' + val % 10;
-        val /= 10;
-    } while (val);
-    return p;
+  char *p = s + 13;
+  *p = '\0';
+  do
+  {
+    if ((p - s) % 4 == 2)
+      *--p = ',';
+    *--p = '0' + val % 10;
+    val /= 10;
+  } while (val);
+  return p;
 }
 
+// Since we can allow blanks, let's always send
+// a string the length of the display for the bottom
+// row
+void print_bottom_line(const char *message)
+{
+  const uint8_t LCD_WIDTH = 16;
+  char buffer[LCD_WIDTH + 1];
+  memset(buffer, '\0', LCD_WIDTH + 1);
+  memset(buffer, ' ', LCD_WIDTH);
+
+  if (strlen(message) < LCD_WIDTH)
+  {
+    memcpy(buffer, message, strlen(message));
+  }
+  else
+  {
+    memcpy(buffer, message, LCD_WIDTH);
+  }
+
+  lcd.setCursor(0, 1);
+  lcd.print(buffer);
+
+  Serial.print(message);
+  Serial.print(" -> ");
+  Serial.println(buffer);
+}
+
+// Print the temperature we just got from an event. Note that there's
+// a bug here if the length of the string is too big, it'll crash.
+void print_temperature(const char *room, const char *temperature)
+{
+  const uint8_t LCD_WIDTH = 16;
+  char buffer[LCD_WIDTH + 1];
+  memset(buffer, '\0', LCD_WIDTH + 1);
+  sprintf(buffer, "%s: %sF", room, temperature);
+
+  print_bottom_line(buffer);
+}
+
+// Process a tricky event path to know how to update the display... this
+// should be cleaned up when I have the time!
 void display_message(const char *topic, const char *message)
 {
   int topic_length = strlen(topic);
-  if(strncmp(SL_CONNCURRENCY_TOPIC, topic, topic_length) == 0)
+  if (strncmp(SL_CONNCURRENCY_TOPIC, topic, topic_length) == 0)
   {
     unsigned long concurrency = atol(message);
     char buffer[14];
+    char *number_string = ultoa(concurrency, buffer);
+    lcd.setCursor(0, 0);
+    lcd.print(number_string);
     Serial.println(ultoa(concurrency, buffer));
   }
-  else if(strncmp(LIVING_ROOM_MOTION_TOPIC, topic, topic_length) == 0)
+  else if (strncmp(BATHROOM_MOTION_TOPIC, topic, topic_length) == 0)
   {
-    if(strncmp(MQTT_ON, message, 2) == 0)
+    if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      Serial.println("Living Room Motion");
+      print_bottom_line("Bathroom Motion");
     }
     else
     {
-      Serial.println("Living Room Cleared");
+      print_bottom_line("Bathroom Cleared");
     }
   }
-  else if(strncmp(WORKSHOP_MOTION_TOPIC, topic, topic_length) == 0)
+  else if (strncmp(BEDROOM_MOTION_TOPIC, topic, topic_length) == 0)
   {
-    if(strncmp(MQTT_ON, message, 2) == 0)
+    if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      Serial.println("Workshop Motion");
+      print_bottom_line("Bedroom Motion");
     }
     else
     {
-      Serial.println("Workshop Cleared");
+      print_bottom_line("Bedroom Cleared");
     }
   }
+  else if (strncmp(OFFICE_MOTION_TOPIC, topic, topic_length) == 0)
+  {
+    if (strncmp(MQTT_ON, message, 2) == 0)
+    {
+      print_bottom_line("Office Motion");
+    }
+    else
+    {
+      print_bottom_line("Office Cleared");
+    }
+  }
+  else if (strncmp(LAUNDRY_ROOM_MOTION_TOPIC, topic, topic_length) == 0)
+  {
+    if (strncmp(MQTT_ON, message, 2) == 0)
+    {
+      print_bottom_line("Laundry Room Motion");
+    }
+    else
+    {
+      print_bottom_line("Laundry Room Cleared");
+    }
+  }
+  else if (strncmp(LIVING_ROOM_MOTION_TOPIC, topic, topic_length) == 0)
+  {
+    if (strncmp(MQTT_ON, message, 2) == 0)
+    {
+      print_bottom_line("Living Room Motion");
+    }
+    else
+    {
+      print_bottom_line("Living Room Cleared");
+    }
+  }
+  else if (strncmp(WORKSHOP_MOTION_TOPIC, topic, topic_length) == 0)
+  {
+    if (strncmp(MQTT_ON, message, 2) == 0)
+    {
+      print_bottom_line("Workshop Motion");
+    }
+    else
+    {
+      print_bottom_line("Workshop Cleared");
+    }
+  }
+  else if (strncmp(BATHROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+  {
+    print_temperature("Bathroom", message);
+  }
+  else if (strncmp(BEDROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+  {
+    print_temperature("Bedroom", message);
+  }
+  else if (strncmp(OFFICE_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+  {
+    print_temperature("Office", message);
+  }
+  else if (strncmp(LAUNDRY_ROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+  {
+    print_temperature("Laundry", message);
+  }
+  else if (strncmp(LIVING_ROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+  {
+    print_temperature("Living", message);
+  }
+  else if (strncmp(WORKSHOP_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+  {
+    print_temperature("Workshop", message);
+  }
+
+  else if (strncmp(OUTSIDE_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+  {
+    print_temperature("Outside", message);
+  }
+
   else
   {
     Serial.print(topic);
     Serial.print(" ");
     Serial.println(message);
+
+    print_bottom_line(topic);
   }
-
-  
 }
-
 
 void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
 {
@@ -218,6 +331,7 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
 
 #endif
 
+  // Go print the message
   display_message(topic, payload_string);
 
   digitalWrite(LED_BUILTIN, LOW);
@@ -226,16 +340,19 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
 void printLocalTime()
 {
   struct tm timeinfo;
-  if(!getLocalTime(&timeinfo)){
+  if (!getLocalTime(&timeinfo))
+  {
     Serial.println("Failed to obtain time");
     return;
   }
-  Serial.println(&timeinfo, "%I:%M:%S %p");
+  lcd.setCursor(8, 0);
+  lcd.print(&timeinfo, "%I:%M:%S %p");
+  //Serial.println(&timeinfo, "%I:%M:%S %p");
 }
 
 void loop()
 {
-  
+
   printLocalTime();
   delay(1000);
 }
