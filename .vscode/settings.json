@@ -6,6 +6,7 @@
         "network",
         "println",
         "rawr",
+        "ultoa",
         "wifi"
     ]
 }

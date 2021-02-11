@@ -17,6 +17,7 @@ extern "C"
 #include <SD.h>
 #include <ESP32Servo.h>
 #include <LiquidCrystal.h>
+#include "time.h"
 
 #include <creatures.h>
 #include "creature.h"
@@ -34,7 +35,7 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 
 
-void update_lcd(String top_line, String bottom_line)
+void paint_lcd(String top_line, String bottom_line)
 {
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -53,10 +54,12 @@ void WiFiEvent(WiFiEvent_t event)
     Serial.println("WiFi connected");
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
+    paint_lcd("My IP", WiFi.localIP().toString());
     connectToMqtt();
     break;
   case SYSTEM_EVENT_STA_DISCONNECTED:
     Serial.println("WiFi lost connection");
+    paint_lcd("Oh no!", "Wifi connection lost!");
     xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
     xTimerStart(wifiReconnectTimer, 0);
     onWifiDisconnect(); // Tell the broker we lost Wifi
@@ -69,7 +72,7 @@ void set_up_lcd()
   const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
   lcd = LiquidCrystal(rs, en, d4, d5, d6, d7);
   lcd.begin(16, 2);
-  update_lcd(CREATURE_NAME, "Starting up...");
+  paint_lcd(CREATURE_NAME, "Starting up...");
 }
 
 void setup()
@@ -117,7 +120,69 @@ void setup()
   connectToWiFi();
   digitalWrite(LED_BUILTIN, LOW);
 
+  // TODO: Remove this, don't talk to the Internet
+  const char* ntpServer = "pool.ntp.org";
+  const long  gmtOffset_sec = -28800;
+  const int   daylightOffset_sec = 3600;
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
 }
+
+// Stolen from StackOverflow
+char *ultoa(unsigned long val, char *s)
+{
+    char *p = s + 13;
+    *p = '\0';
+    do {
+        if ((p - s) % 4 == 2)
+            *--p = ',';
+        *--p = '0' + val % 10;
+        val /= 10;
+    } while (val);
+    return p;
+}
+
+void display_message(const char *topic, const char *message)
+{
+  int topic_length = strlen(topic);
+  if(strncmp(SL_CONNCURRENCY_TOPIC, topic, topic_length) == 0)
+  {
+    unsigned long concurrency = atol(message);
+    char buffer[14];
+    Serial.println(ultoa(concurrency, buffer));
+  }
+  else if(strncmp(LIVING_ROOM_MOTION_TOPIC, topic, topic_length) == 0)
+  {
+    if(strncmp(MQTT_ON, message, 2) == 0)
+    {
+      Serial.println("Living Room Motion");
+    }
+    else
+    {
+      Serial.println("Living Room Cleared");
+    }
+  }
+  else if(strncmp(WORKSHOP_MOTION_TOPIC, topic, topic_length) == 0)
+  {
+    if(strncmp(MQTT_ON, message, 2) == 0)
+    {
+      Serial.println("Workshop Motion");
+    }
+    else
+    {
+      Serial.println("Workshop Cleared");
+    }
+  }
+  else
+  {
+    Serial.print(topic);
+    Serial.print(" ");
+    Serial.println(message);
+  }
+
+  
+}
+
 
 void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
 {
@@ -129,7 +194,9 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
   memset(payload_string, '\0', len + 1);
   memcpy(payload_string, payload, len);
 
-  update_lcd(String(payload_string), "");
+  //update_lcd(String(payload_string), "");
+
+#ifdef CREATURE_DEBUG
 
   Serial.println("Message received:");
   Serial.print("  topic: ");
@@ -149,10 +216,26 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
   Serial.print("  total: ");
   Serial.println(total);
 
+#endif
+
+  display_message(topic, payload_string);
+
   digitalWrite(LED_BUILTIN, LOW);
+}
+
+void printLocalTime()
+{
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  Serial.println(&timeinfo, "%I:%M:%S %p");
 }
 
 void loop()
 {
-  // nothing happens after setup
+  
+  printLocalTime();
+  delay(1000);
 }
