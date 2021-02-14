@@ -10,12 +10,15 @@ extern "C"
 {
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
+#include "freertos/queue.h"
 }
-#include <AsyncMqttClient.h>
 
-#include <SPI.h>
-#include <SD.h>
+#define LCD_HEIGHT 2
+#define LCD_WIDTH 16
+#define DISPLAY_QUEUE_LENGTH 5
+
 #include <LiquidCrystal.h>
+#include <AsyncMqttClient.h>
 #include "time.h"
 
 #include <creatures.h>
@@ -23,13 +26,28 @@ extern "C"
 #include "secrets.h"
 #include "mqtt.h"
 #include "connection.h"
+#include "main.h"
 
 extern AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
 TimerHandle_t wifiReconnectTimer;
 
+// Queue for updates to the display
+QueueHandle_t displayQueue;
+
+TaskHandle_t displayUpdateTaskHandler;
+TaskHandle_t localTimeTaskHandler;
+
 const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+// One message for the d
+struct DisplayMessage
+{
+  uint8_t x;
+  uint8_t y;
+  char text[LCD_WIDTH + 1];
+} __attribute__((packed));
 
 // Clear the entire LCD and print a message
 void paint_lcd(String top_line, String bottom_line)
@@ -67,7 +85,7 @@ void set_up_lcd()
 {
   const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
   lcd = LiquidCrystal(rs, en, d4, d5, d6, d7);
-  lcd.begin(16, 2);
+  lcd.begin(LCD_WIDTH, LCD_HEIGHT);
   paint_lcd(CREATURE_NAME, "Starting up...");
   delay(1000);
 }
@@ -76,6 +94,9 @@ void setup()
 {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
+
+  // Create the message queue
+  displayQueue = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct DisplayMessage));
 
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
@@ -121,6 +142,20 @@ void setup()
   const long gmtOffset_sec = -28800;
   const int daylightOffset_sec = 3600;
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  xTaskCreate(updateDisplayTask,
+              "updateDisplayTask",
+              2048,
+              NULL,
+              2,
+              &displayUpdateTaskHandler);
+
+  xTaskCreate(printLocalTimeTask,
+              "printLocalTimeTask",
+              2048,
+              NULL,
+              1,
+              &localTimeTaskHandler);
 }
 
 // Stolen from StackOverflow
@@ -141,40 +176,43 @@ char *ultoa(unsigned long val, char *s)
 // Since we can allow blanks, let's always send
 // a string the length of the display for the bottom
 // row
-void print_bottom_line(const char *message)
+void enqueue_bottom_line(const char *message)
 {
-  const uint8_t LCD_WIDTH = 16;
-  char buffer[LCD_WIDTH + 1];
-  memset(buffer, '\0', LCD_WIDTH + 1);
-  memset(buffer, ' ', LCD_WIDTH);
+  // Construct a DisplayMessage and send it from the ISR-safe handler
+  struct DisplayMessage statusUpdate;
+  statusUpdate.x = 0;
+  statusUpdate.y = 1;
+
+  memset(statusUpdate.text, '\0', LCD_WIDTH + 1);
+  memset(statusUpdate.text, ' ', LCD_WIDTH);
 
   if (strlen(message) < LCD_WIDTH)
   {
-    memcpy(buffer, message, strlen(message));
+    memcpy(statusUpdate.text, message, strlen(message));
   }
   else
   {
-    memcpy(buffer, message, LCD_WIDTH);
+    memcpy(statusUpdate.text, message, LCD_WIDTH);
   }
 
-  lcd.setCursor(0, 1);
-  lcd.print(buffer);
+  xQueueSendToBackFromISR(displayQueue, &statusUpdate, NULL);
 
+#ifdef CREATURE_DEBUG
   Serial.print(message);
   Serial.print(" -> ");
-  Serial.println(buffer);
+  Serial.println(statusUpdate.text);
+#endif
 }
 
 // Print the temperature we just got from an event. Note that there's
 // a bug here if the length of the string is too big, it'll crash.
 void print_temperature(const char *room, const char *temperature)
 {
-  const uint8_t LCD_WIDTH = 16;
   char buffer[LCD_WIDTH + 1];
   memset(buffer, '\0', LCD_WIDTH + 1);
   sprintf(buffer, "%s: %sF", room, temperature);
 
-  print_bottom_line(buffer);
+  enqueue_bottom_line(buffer);
 }
 
 // Process a tricky event path to know how to update the display... this
@@ -187,74 +225,83 @@ void display_message(const char *topic, const char *message)
     unsigned long concurrency = atol(message);
     char buffer[14];
     char *number_string = ultoa(concurrency, buffer);
-    lcd.setCursor(0, 0);
-    lcd.print(number_string);
+
+    struct DisplayMessage update_message;
+    update_message.x = 0;
+    update_message.y = 0;
+    memcpy(&update_message.text, number_string, sizeof(buffer));
+
+    xQueueSendToBackFromISR(displayQueue, &update_message, NULL);
+
+#ifdef CREATURE_DEBUG
+    Serial.print("processed SL concurrency: ");
     Serial.println(ultoa(concurrency, buffer));
+#endif
   }
   else if (strncmp(BATHROOM_MOTION_TOPIC, topic, topic_length) == 0)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      print_bottom_line("Bathroom Motion");
+      enqueue_bottom_line("Bathroom Motion");
     }
     else
     {
-      print_bottom_line("Bathroom Cleared");
+      enqueue_bottom_line("Bathroom Cleared");
     }
   }
   else if (strncmp(BEDROOM_MOTION_TOPIC, topic, topic_length) == 0)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      print_bottom_line("Bedroom Motion");
+      enqueue_bottom_line("Bedroom Motion");
     }
     else
     {
-      print_bottom_line("Bedroom Cleared");
+      enqueue_bottom_line("Bedroom Cleared");
     }
   }
   else if (strncmp(OFFICE_MOTION_TOPIC, topic, topic_length) == 0)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      print_bottom_line("Office Motion");
+      enqueue_bottom_line("Office Motion");
     }
     else
     {
-      print_bottom_line("Office Cleared");
+      enqueue_bottom_line("Office Cleared");
     }
   }
   else if (strncmp(LAUNDRY_ROOM_MOTION_TOPIC, topic, topic_length) == 0)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      print_bottom_line("Laundry Room Motion");
+      enqueue_bottom_line("Laundry Room Motion");
     }
     else
     {
-      print_bottom_line("Laundry Room Cleared");
+      enqueue_bottom_line("Laundry Room Cleared");
     }
   }
   else if (strncmp(LIVING_ROOM_MOTION_TOPIC, topic, topic_length) == 0)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      print_bottom_line("Living Room Motion");
+      enqueue_bottom_line("Living Room Motion");
     }
     else
     {
-      print_bottom_line("Living Room Cleared");
+      enqueue_bottom_line("Living Room Cleared");
     }
   }
   else if (strncmp(WORKSHOP_MOTION_TOPIC, topic, topic_length) == 0)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      print_bottom_line("Workshop Motion");
+      enqueue_bottom_line("Workshop Motion");
     }
     else
     {
-      print_bottom_line("Workshop Cleared");
+      enqueue_bottom_line("Workshop Cleared");
     }
   }
   else if (strncmp(BATHROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
@@ -293,7 +340,7 @@ void display_message(const char *topic, const char *message)
     Serial.print(" ");
     Serial.println(message);
 
-    print_bottom_line(topic);
+    enqueue_bottom_line(topic);
   }
 }
 
@@ -306,8 +353,6 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
   char payload_string[len + 1];
   memset(payload_string, '\0', len + 1);
   memcpy(payload_string, payload, len);
-
-  //update_lcd(String(payload_string), "");
 
 #ifdef CREATURE_DEBUG
 
@@ -337,22 +382,75 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
   digitalWrite(LED_BUILTIN, LOW);
 }
 
-void printLocalTime()
+void updateDisplayTask(void *pvParamenters)
+{
+
+  struct DisplayMessage message;
+
+  for (;;)
+  {
+    if (displayQueue != NULL)
+    {
+      if (xQueueReceive(displayQueue, &message, (TickType_t)10) == pdPASS)
+      {
+
+        lcd.setCursor(message.x, message.y);
+        lcd.print(message.text);
+
+#ifdef CREATURE_DEBUG
+        Serial.print("Read message from queue: x: ");
+        Serial.print(message.x);
+        Serial.print(", y: ");
+        Serial.print(message.y);
+        Serial.print(", message: '");
+        Serial.print(message.text);
+        Serial.print("', size: ");
+        Serial.println(sizeof(message));
+#else
+        Serial.print("message read from queue: ");
+        Serial.println(message.text);
+#endif
+      }
+    }
+    vTaskDelay(TickType_t pdMS_TO_TICKS(100));
+  }
+}
+
+// Create a task to add the local time to the queue to print
+void printLocalTimeTask(void *pvParameters)
 {
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo))
+
+  for (;;)
   {
-    Serial.println("Failed to obtain time");
-    return;
+    if (getLocalTime(&timeinfo))
+    {
+
+      struct DisplayMessage message;
+      message.x = 8;
+      message.y = 0;
+
+      strftime(message.text, LCD_WIDTH, "%I:%M:%S %p", &timeinfo);
+
+#ifdef CREATURE_DEBUG
+      Serial.print("Current time: ");
+      Serial.println(message.text);
+#endif
+
+      // Drop this message into the queue, giving up after 500ms if there's no
+      // space in the queue
+      xQueueSendToBack(displayQueue, &message, pdMS_TO_TICKS(500));
+    }
+    else
+    {
+      Serial.println("Failed to obtain time");
+    }
+
+    // Wait before repeating
+    vTaskDelay(TickType_t pdMS_TO_TICKS(1000));
   }
-  lcd.setCursor(8, 0);
-  lcd.print(&timeinfo, "%I:%M:%S %p");
-  //Serial.println(&timeinfo, "%I:%M:%S %p");
 }
 
 void loop()
 {
-
-  printLocalTime();
-  delay(1000);
 }
