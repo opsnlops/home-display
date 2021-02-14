@@ -13,9 +13,7 @@ extern "C"
 #include "freertos/queue.h"
 }
 
-#define LCD_HEIGHT 2
-#define LCD_WIDTH 16
-#define DISPLAY_QUEUE_LENGTH 5
+#include "main.h"
 
 #include <LiquidCrystal.h>
 #include <AsyncMqttClient.h>
@@ -26,7 +24,6 @@ extern "C"
 #include "secrets.h"
 #include "mqtt.h"
 #include "connection.h"
-#include "main.h"
 
 extern AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
@@ -40,14 +37,6 @@ TaskHandle_t localTimeTaskHandler;
 
 const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
-
-// One message for the d
-struct DisplayMessage
-{
-  uint8_t x;
-  uint8_t y;
-  char text[LCD_WIDTH + 1];
-} __attribute__((packed));
 
 // Clear the entire LCD and print a message
 void paint_lcd(String top_line, String bottom_line)
@@ -131,7 +120,7 @@ void setup()
   mqttClient.onDisconnect(onMqttDisconnect);
   mqttClient.onSubscribe(onMqttSubscribe);
   mqttClient.onUnsubscribe(onMqttUnsubscribe);
-  mqttClient.onMessage(onMqttMessage);
+  mqttClient.onMessage(handle_mqtt_message);
   mqttClient.onPublish(onMqttPublish);
 
   connectToWiFi();
@@ -344,7 +333,7 @@ void display_message(const char *topic, const char *message)
   }
 }
 
-void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
+void handle_mqtt_message(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
 {
   digitalWrite(LED_BUILTIN, HIGH);
 

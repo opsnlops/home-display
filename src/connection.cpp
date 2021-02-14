@@ -1,8 +1,7 @@
 
-
-// This isn't gonna work on anything but an ESP8266 or ESP32
-#if !(defined(ESP8266) || defined(ESP32))
-#error This code is intended to run only on the ESP8266 and ESP32 boards
+// This isn't gonna work on anything but an ESP32
+#if !defined(ESP32)
+#error This code is intended to run only on the ESP32 board
 #endif
 
 #include <WiFi.h>

@@ -8,5 +8,8 @@
         "rawr",
         "ultoa",
         "wifi"
-    ]
+    ],
+    "files.associations": {
+        "sdkconfig.h": "c"
+    }
 }
