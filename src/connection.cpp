@@ -72,6 +72,9 @@ void signal_sos()
 IPAddress find_broker(const char *broker_service, const char *broker_protocol)
 {
 
+    log_v("returning a fake broker IP");
+    return IPAddress(192, 168, 7, 129);
+
     Serial.printf("Browsing for service _%s._%s.local. ... ", broker_service, broker_protocol);
 
     int n = MDNS.queryService(broker_service, broker_protocol);

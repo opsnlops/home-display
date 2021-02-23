@@ -4,6 +4,7 @@
 #endif
 
 #include <Arduino.h>
+#include <Wire.h>
 
 #include <WiFi.h>
 extern "C"
@@ -15,9 +16,10 @@ extern "C"
 
 #include "main.h"
 
-#include <LiquidCrystal.h>
 #include <AsyncMqttClient.h>
 #include "time.h"
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1325.h>
 
 #include <creatures.h>
 #include "creature.h"
@@ -35,33 +37,41 @@ QueueHandle_t displayQueue;
 TaskHandle_t displayUpdateTaskHandler;
 TaskHandle_t localTimeTaskHandler;
 
-const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
-LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+#define OLED_CS 5
+#define OLED_RESET 15
+#define OLED_DC 13
+Adafruit_SSD1325 display(OLED_DC, OLED_RESET, OLED_CS);
+
+// I'll most likely need to figure out a better way to do this, but this will work for now
+char clock_display[LCD_WIDTH];
+char sl_concurrency[LCD_WIDTH];
+char home_message[LCD_WIDTH];
+char temperature[LCD_WIDTH];
 
 // Clear the entire LCD and print a message
 void paint_lcd(String top_line, String bottom_line)
 {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(top_line);
-  lcd.setCursor(0, 1);
-  lcd.print(bottom_line);
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println(top_line);
+  display.print(bottom_line);
+  display.display();
 }
 
 void WiFiEvent(WiFiEvent_t event)
 {
-  Serial.printf("[WiFi-event] event: %d\n", event);
+  log_v("[WiFi-event] event: %d\n", event);
   switch (event)
   {
   case SYSTEM_EVENT_STA_GOT_IP:
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
+    log_i("WiFi connected");
+    log_i("IP address: ");
+    //log_i(WiFi.localIP());
     paint_lcd("My IP", WiFi.localIP().toString());
     connectToMqtt();
     break;
   case SYSTEM_EVENT_STA_DISCONNECTED:
-    Serial.println("WiFi lost connection");
+    log_w("WiFi lost connection");
     paint_lcd("Oh no!", "Wifi connection lost!");
     xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
     xTimerStart(wifiReconnectTimer, 0);
@@ -72,10 +82,20 @@ void WiFiEvent(WiFiEvent_t event)
 
 void set_up_lcd()
 {
-  const int rs = 12, en = 14, d4 = 26, d5 = 25, d6 = 27, d7 = 33;
-  lcd = LiquidCrystal(rs, en, d4, d5, d6, d7);
-  lcd.begin(LCD_WIDTH, LCD_HEIGHT);
+  display.begin();
+  display.display();
+  delay(1000);
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
   paint_lcd(CREATURE_NAME, "Starting up...");
+
+  // Initialize our display vars
+  memset(clock_display, '\0', LCD_WIDTH);
+  memset(sl_concurrency, '\0', LCD_WIDTH);
+  memset(home_message, '\0', LCD_WIDTH);
+  memset(temperature, '\0', LCD_WIDTH);
+
   delay(1000);
 }
 
@@ -83,6 +103,8 @@ void setup()
 {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
+
+  set_up_lcd();
 
   // Create the message queue
   displayQueue = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct DisplayMessage));
@@ -94,22 +116,20 @@ void setup()
   // Nice long delay to let minicom start
   delay(5000);
 
-  set_up_lcd();
-
   if (!MDNS.begin(CREATURE_NAME))
   {
-    Serial.println("Error setting up mDNS responder!");
+    log_e("Error setting up mDNS responder!");
     while (1)
     {
       delay(1000);
     }
   }
-  Serial.println("MDNS set up");
+  log_v("MDNS set up");
 
   // We aren't _really_ running something on tcp/666, but this lets me
   // find the IP of the creature from an mDNS browser
   MDNS.addService("creature", "tcp", 666);
-  Serial.println("added our fake mDNS service");
+  log_d("added our fake mDNS service");
 
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
   wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
@@ -162,46 +182,32 @@ char *ultoa(unsigned long val, char *s)
   return p;
 }
 
-// Since we can allow blanks, let's always send
-// a string the length of the display for the bottom
-// row
-void enqueue_bottom_line(const char *message)
-{
-  // Construct a DisplayMessage and send it from the ISR-safe handler
-  struct DisplayMessage statusUpdate;
-  statusUpdate.x = 0;
-  statusUpdate.y = 1;
-
-  memset(statusUpdate.text, '\0', LCD_WIDTH + 1);
-  memset(statusUpdate.text, ' ', LCD_WIDTH);
-
-  if (strlen(message) < LCD_WIDTH)
-  {
-    memcpy(statusUpdate.text, message, strlen(message));
-  }
-  else
-  {
-    memcpy(statusUpdate.text, message, LCD_WIDTH);
-  }
-
-  xQueueSendToBackFromISR(displayQueue, &statusUpdate, NULL);
-
-#ifdef CREATURE_DEBUG
-  Serial.print(message);
-  Serial.print(" -> ");
-  Serial.println(statusUpdate.text);
-#endif
-}
-
 // Print the temperature we just got from an event. Note that there's
 // a bug here if the length of the string is too big, it'll crash.
 void print_temperature(const char *room, const char *temperature)
 {
   char buffer[LCD_WIDTH + 1];
-  memset(buffer, '\0', LCD_WIDTH + 1);
-  sprintf(buffer, "%s: %sF", room, temperature);
 
-  enqueue_bottom_line(buffer);
+  struct DisplayMessage message;
+  message.type = temperature_message;
+
+  memset(buffer, '\0', LCD_WIDTH + 1);
+  sprintf(message.text, "%s: %sF", room, temperature);
+
+  xQueueSendToBackFromISR(displayQueue, &message, NULL);
+}
+
+void show_home_message(const char *message)
+{
+  char buffer[LCD_WIDTH + 1];
+
+  struct DisplayMessage home_message;
+  home_message.type = home_event_message;
+
+  memset(home_message.text, '\0', LCD_WIDTH + 1);
+  memcpy(home_message.text, message, LCD_WIDTH);
+
+  xQueueSendToBackFromISR(displayQueue, &home_message, NULL);
 }
 
 // Process a tricky event path to know how to update the display... this
@@ -216,10 +222,8 @@ void display_message(const char *topic, const char *message)
     char *number_string = ultoa(concurrency, buffer);
 
     struct DisplayMessage update_message;
-    update_message.x = 0;
-    update_message.y = 0;
+    update_message.type = sl_concurrency_message;
     memcpy(&update_message.text, number_string, sizeof(buffer));
-
     xQueueSendToBackFromISR(displayQueue, &update_message, NULL);
 
 #ifdef CREATURE_DEBUG
@@ -231,66 +235,66 @@ void display_message(const char *topic, const char *message)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      enqueue_bottom_line("Bathroom Motion");
+      show_home_message("Bathroom Motion");
     }
     else
     {
-      enqueue_bottom_line("Bathroom Cleared");
+      show_home_message("Bathroom Cleared");
     }
   }
   else if (strncmp(BEDROOM_MOTION_TOPIC, topic, topic_length) == 0)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      enqueue_bottom_line("Bedroom Motion");
+      show_home_message("Bedroom Motion");
     }
     else
     {
-      enqueue_bottom_line("Bedroom Cleared");
+      show_home_message("Bedroom Cleared");
     }
   }
   else if (strncmp(OFFICE_MOTION_TOPIC, topic, topic_length) == 0)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      enqueue_bottom_line("Office Motion");
+      show_home_message("Office Motion");
     }
     else
     {
-      enqueue_bottom_line("Office Cleared");
+      show_home_message("Office Cleared");
     }
   }
   else if (strncmp(LAUNDRY_ROOM_MOTION_TOPIC, topic, topic_length) == 0)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      enqueue_bottom_line("Laundry Room Motion");
+      show_home_message("Laundry Room Motion");
     }
     else
     {
-      enqueue_bottom_line("Laundry Room Cleared");
+      show_home_message("Laundry Room Cleared");
     }
   }
   else if (strncmp(LIVING_ROOM_MOTION_TOPIC, topic, topic_length) == 0)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      enqueue_bottom_line("Living Room Motion");
+      show_home_message("Living Room Motion");
     }
     else
     {
-      enqueue_bottom_line("Living Room Cleared");
+      show_home_message("Living Room Cleared");
     }
   }
   else if (strncmp(WORKSHOP_MOTION_TOPIC, topic, topic_length) == 0)
   {
     if (strncmp(MQTT_ON, message, 2) == 0)
     {
-      enqueue_bottom_line("Workshop Motion");
+      show_home_message("Workshop Motion");
     }
     else
     {
-      enqueue_bottom_line("Workshop Cleared");
+      show_home_message("Workshop Cleared");
     }
   }
   else if (strncmp(BATHROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
@@ -311,7 +315,7 @@ void display_message(const char *topic, const char *message)
   }
   else if (strncmp(LIVING_ROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
   {
-    print_temperature("Living", message);
+    print_temperature("Living Room", message);
   }
   else if (strncmp(WORKSHOP_TEMPERATURE_TOPIC, topic, topic_length) == 0)
   {
@@ -329,8 +333,9 @@ void display_message(const char *topic, const char *message)
     Serial.print(" ");
     Serial.println(message);
 
-    enqueue_bottom_line(topic);
+    show_home_message(topic);
   }
+
 }
 
 void handle_mqtt_message(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
@@ -383,21 +388,45 @@ void updateDisplayTask(void *pvParamenters)
       if (xQueueReceive(displayQueue, &message, (TickType_t)10) == pdPASS)
       {
 
-        lcd.setCursor(message.x, message.y);
-        lcd.print(message.text);
+        switch (message.type)
+        {
+        case sl_concurrency_message:
+          memcpy(sl_concurrency, message.text, LCD_WIDTH);
+          break;
+        case home_event_message:
+          memcpy(home_message, message.text, LCD_WIDTH);
+          break;
+        case clock_display_message:
+          memcpy(clock_display, message.text, LCD_WIDTH);
+          break;
+        case temperature_message:
+          memcpy(temperature, message.text, LCD_WIDTH);
+        }
+
+        // The display is buffered, so this just means wipe out what's there
+        display.clearDisplay();
+        display.setCursor(0, 0);
+        display.setTextSize(2);
+        display.println(sl_concurrency);
+        display.setTextSize(1);
+        display.println("");
+        display.println(home_message);
+        display.println(temperature);
+        display.println("");
+        display.println("");
+        display.print("          ");
+        display.println(clock_display);
+        display.display();
 
 #ifdef CREATURE_DEBUG
-        Serial.print("Read message from queue: x: ");
-        Serial.print(message.x);
-        Serial.print(", y: ");
-        Serial.print(message.y);
-        Serial.print(", message: '");
+        Serial.print("Read message from queue: type: ");
+        Serial.print(message.type);
+        Serial.print(", text: ");
         Serial.print(message.text);
-        Serial.print("', size: ");
+        Serial.print(", size: ");
         Serial.println(sizeof(message));
 #else
-        Serial.print("message read from queue: ");
-        Serial.println(message.text);
+        log_d("message read from queue: %s", message.text);
 #endif
       }
     }
@@ -416,8 +445,7 @@ void printLocalTimeTask(void *pvParameters)
     {
 
       struct DisplayMessage message;
-      message.x = 8;
-      message.y = 0;
+      message.type = clock_display_message;
 
       strftime(message.text, LCD_WIDTH, "%I:%M:%S %p", &timeinfo);
 
@@ -432,7 +460,7 @@ void printLocalTimeTask(void *pvParameters)
     }
     else
     {
-      Serial.println("Failed to obtain time");
+      log_w("Failed to obtain time");
     }
 
     // Wait before repeating
