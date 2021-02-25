@@ -6,13 +6,19 @@
 
 #include <WiFi.h>
 
+extern "C"
+{
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
+}
+
 #include "main.h"
 #include "connection.h"
 #include "secrets.h"
 
 const int LED_PIN = LED_BUILTIN;
 
-char* getWifiNetwork()
+char *getWifiNetwork()
 {
     return WIFI_NETWORK;
 }
@@ -22,7 +28,15 @@ void connectToWiFi()
     log_i("Connecting to WiFi network: %s", WIFI_NETWORK);
     show_startup("about to connect to Wifi");
 
+    // The brownout detector is _really_ touchy while starting up Wifi,
+    // turn it off just for a moment to set the Wifi chip start up
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
     WiFi.begin(WIFI_NETWORK, WIFI_PASSWORD);
+
+    // ...and now turn it back on
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1);
+
     show_startup("WiFi.begin() done");
 }
 
