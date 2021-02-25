@@ -13,15 +13,22 @@ extern "C"
 
 #include <AsyncMqttClient.h>
 
-#define LCD_HEIGHT 2
-#define LCD_WIDTH 16
+#define LCD_WIDTH 22
 #define DISPLAY_QUEUE_LENGTH 5
+
+
+enum MessageType {
+  clock_display_message,
+  sl_concurrency_message,
+  home_event_message,
+  temperature_message
+};
+
 
 // One message for the display
 struct DisplayMessage
 {
-  uint8_t x;
-  uint8_t y;
+  MessageType type;
   char text[LCD_WIDTH + 1];
 } __attribute__((packed));
 
@@ -30,11 +37,12 @@ void WiFiEvent(WiFiEvent_t event);
 
 char *ultoa(unsigned long val, char *s);
 void set_up_lcd();
+void show_startup(String line1);
+void show_error(String line1, String line2);
 void paint_lcd(String top_line, String bottom_line);
 void updateDisplayTask(void *pvParamenters);
 void printLocalTimeTask(void *pvParameters);
 
-void enqueue_bottom_line(const char *message);
 void print_temperature(const char *room, const char *temperature);
 void display_message(const char *topic, const char *message);
 

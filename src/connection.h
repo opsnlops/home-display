@@ -9,6 +9,7 @@
 const IPAddress DEFAULT_IP_ADDRESS = IPAddress(0,0,0,0);
 const uint16_t DEFAULT_MQTT_PORT = 1883;
 
+char* getWifiNetwork();
 void connectToWiFi();
 void signal_conenction_error();
 

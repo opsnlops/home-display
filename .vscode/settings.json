@@ -4,6 +4,7 @@
         "mdns",
         "mqtt",
         "network",
+        "oled",
         "println",
         "rawr",
         "ultoa",
