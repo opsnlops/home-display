@@ -94,6 +94,7 @@ IPAddress find_broker(const char *broker_service, const char *broker_protocol)
     //log_v("returning a fake broker IP");
     //return IPAddress(192, 168, 7, 129);
 
+    show_startup("Looking for the\nmagic broker");
     log_i("Browsing for service _%s._%s.local. ... ", broker_service, broker_protocol);
 
     int n = MDNS.queryService(broker_service, broker_protocol);
@@ -108,6 +109,7 @@ IPAddress find_broker(const char *broker_service, const char *broker_protocol)
         {
             // Print details for each service found
             log_d("  %d: %s (%s:%d) role: %s", (i + 1), MDNS.hostname(i), MDNS.IP(i).toString().c_str(), MDNS.port(i), MDNS.txt(i, 0));
+            show_startup(MDNS.hostname(i));
 
             // hahah
             return MDNS.IP(i);

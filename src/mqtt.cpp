@@ -5,6 +5,7 @@
 #include "creature.h"
 #include "connection.h"
 #include "mqtt.h"
+#include "main.h"
 
 const char *broker_role = "magic";
 const char *broker_service = "mqtt";
@@ -32,6 +33,7 @@ void connectToMqtt()
   mqttClient.setServer(mqtt_broker_address, mqtt_broker_port);
 
   log_i("Connecting to MQTT...");
+  show_startup("Connecting to MQTT");
   mqttClient.connect();
 }
 
@@ -39,6 +41,7 @@ void onMqttConnect(bool sessionPresent)
 {
   log_i("Connected to MQTT.");
   log_v("Session present: %b", sessionPresent);
+  show_startup("Connected to MQTT");
 
   // What topics do we care about?
   mqttClient.subscribe(SL_CONNCURRENCY_TOPIC, 0);

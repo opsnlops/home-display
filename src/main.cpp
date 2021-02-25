@@ -98,7 +98,7 @@ void WiFiEvent(WiFiEvent_t event)
   case SYSTEM_EVENT_STA_GOT_IP:
     log_i("WiFi connected");
     log_i("IP address: %s", WiFi.localIP().toString().c_str());
-    paint_lcd("My IP", WiFi.localIP().toString());
+    show_startup(WiFi.localIP().toString());
     connectToMqtt();
     break;
   case SYSTEM_EVENT_STA_DISCONNECTED:
@@ -136,6 +136,7 @@ void setup()
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
+
 
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
