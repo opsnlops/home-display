@@ -6,6 +6,7 @@
 
 #include <WiFi.h>
 
+#include "main.h"
 #include "connection.h"
 #include "secrets.h"
 
@@ -19,8 +20,10 @@ char* getWifiNetwork()
 void connectToWiFi()
 {
     log_i("Connecting to WiFi network: %s", WIFI_NETWORK);
+    show_startup("about to connect to Wifi");
 
     WiFi.begin(WIFI_NETWORK, WIFI_PASSWORD);
+    show_startup("WiFi.begin() done");
 }
 
 /**

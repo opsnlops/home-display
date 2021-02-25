@@ -37,6 +37,8 @@ QueueHandle_t displayQueue;
 TaskHandle_t displayUpdateTaskHandler;
 TaskHandle_t localTimeTaskHandler;
 
+uint8_t startup_counter = 0;
+
 #define OLED_CS 5
 #define OLED_RESET 15
 #define OLED_DC 13
@@ -58,18 +60,31 @@ void paint_lcd(String top_line, String bottom_line)
   display.display();
 }
 
-// Cleanly show an error message
-void show_error(String line1, String line2)
+void __show_big_message(String header, String line1, String line2)
 {
   display.clearDisplay();
   display.setCursor(0, 0);
   display.setTextSize(2);
-  display.println("Oh no! :(");
+  display.println(header);
   display.setTextSize(1);
   display.println("");
   display.println(line1);
   display.println(line2);
   display.display();
+}
+
+// Cleanly show an error message
+void show_error(String line1, String line2)
+{
+  __show_big_message("Oh no! :(", line1, line2);
+}
+
+// Cleanly show an error message
+void show_startup(String line1)
+{
+  char buffer[3] = {'\0', '\0', '\0'};
+  itoa(startup_counter++, buffer, 10);
+  __show_big_message("Booting...", buffer, line1);
 }
 
 void WiFiEvent(WiFiEvent_t event)
@@ -93,7 +108,7 @@ void WiFiEvent(WiFiEvent_t event)
     xTimerStart(wifiReconnectTimer, 0);
     onWifiDisconnect(); // Tell the broker we lost Wifi
     break;
-    }
+  }
 }
 
 void set_up_lcd()
@@ -130,9 +145,11 @@ void setup()
 
   // Get the display set up
   set_up_lcd();
+  show_startup("display set up");
 
   // Create the message queue
   displayQueue = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct DisplayMessage));
+  show_startup("queue made");
 
   if (!MDNS.begin(CREATURE_NAME))
   {
@@ -144,6 +161,7 @@ void setup()
     }
   }
   log_v("MDNS set up");
+  show_startup("MDNS set up");
 
   // We aren't _really_ running something on tcp/666, but this lets me
   // find the IP of the creature from an mDNS browser
@@ -151,13 +169,16 @@ void setup()
   MDNS.addServiceTxt("creature", "tcp", "type", "home-display");
   MDNS.addServiceTxt("creature", "tcp", "version", CREATURE_VERSION);
   log_d("added our fake mDNS service");
+  show_startup("MDNS service made");
 
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
   wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
   log_d("created the timers");
+  show_startup("timers made");
 
   WiFi.onEvent(WiFiEvent);
   log_d("setup the Wifi event handler");
+  show_startup("Wifi event timer made");
 
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);
@@ -167,6 +188,7 @@ void setup()
   mqttClient.onPublish(onMqttPublish);
   log_d("set up the MQTT callbacks");
 
+  show_startup("starting up Wifi");
   connectToWiFi();
   digitalWrite(LED_BUILTIN, LOW);
 
@@ -175,6 +197,7 @@ void setup()
   const long gmtOffset_sec = -28800;
   const int daylightOffset_sec = 3600;
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  show_startup("NTP configured");
 
   xTaskCreate(updateDisplayTask,
               "updateDisplayTask",
@@ -189,6 +212,7 @@ void setup()
               NULL,
               1,
               &localTimeTaskHandler);
+  show_startup("timers running");
 }
 
 // Stolen from StackOverflow

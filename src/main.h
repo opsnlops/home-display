@@ -37,6 +37,8 @@ void WiFiEvent(WiFiEvent_t event);
 
 char *ultoa(unsigned long val, char *s);
 void set_up_lcd();
+void show_startup(String line1);
+void show_error(String line1, String line2);
 void paint_lcd(String top_line, String bottom_line);
 void updateDisplayTask(void *pvParamenters);
 void printLocalTimeTask(void *pvParameters);
