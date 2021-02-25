@@ -58,30 +58,47 @@ void paint_lcd(String top_line, String bottom_line)
   display.display();
 }
 
+// Cleanly show an error message
+void show_error(String line1, String line2)
+{
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.setTextSize(2);
+  display.println("Oh no! :(");
+  display.setTextSize(1);
+  display.println("");
+  display.println(line1);
+  display.println(line2);
+  display.display();
+}
+
 void WiFiEvent(WiFiEvent_t event)
 {
   log_v("[WiFi-event] event: %d\n", event);
   switch (event)
   {
+  case SYSTEM_EVENT_WIFI_READY:
+    log_d("wifi ready");
+    break;
   case SYSTEM_EVENT_STA_GOT_IP:
     log_i("WiFi connected");
-    log_i("IP address: ");
-    //log_i(WiFi.localIP());
+    log_i("IP address: %s", WiFi.localIP().toString().c_str());
     paint_lcd("My IP", WiFi.localIP().toString());
     connectToMqtt();
     break;
   case SYSTEM_EVENT_STA_DISCONNECTED:
     log_w("WiFi lost connection");
-    paint_lcd("Oh no!", "Wifi connection lost!");
+    show_error("Unable to connect to Wifi network", getWifiNetwork());
     xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
     xTimerStart(wifiReconnectTimer, 0);
     onWifiDisconnect(); // Tell the broker we lost Wifi
     break;
-  }
+    }
 }
 
 void set_up_lcd()
 {
+  log_i("setting up the OLED display");
   display.begin();
   display.display();
   delay(1000);
@@ -101,24 +118,26 @@ void set_up_lcd()
 
 void setup()
 {
+
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
-
-  set_up_lcd();
-
-  // Create the message queue
-  displayQueue = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct DisplayMessage));
 
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
   while (!Serial)
     ;
-  // Nice long delay to let minicom start
-  delay(5000);
+  log_i("--- STARTED UP ---");
+
+  // Get the display set up
+  set_up_lcd();
+
+  // Create the message queue
+  displayQueue = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct DisplayMessage));
 
   if (!MDNS.begin(CREATURE_NAME))
   {
     log_e("Error setting up mDNS responder!");
+    paint_lcd("Unable to set up MDNS", ":(");
     while (1)
     {
       delay(1000);
@@ -129,12 +148,16 @@ void setup()
   // We aren't _really_ running something on tcp/666, but this lets me
   // find the IP of the creature from an mDNS browser
   MDNS.addService("creature", "tcp", 666);
+  MDNS.addServiceTxt("creature", "tcp", "type", "home-display");
+  MDNS.addServiceTxt("creature", "tcp", "version", CREATURE_VERSION);
   log_d("added our fake mDNS service");
 
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
   wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
+  log_d("created the timers");
 
   WiFi.onEvent(WiFiEvent);
+  log_d("setup the Wifi event handler");
 
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);
@@ -142,6 +165,7 @@ void setup()
   mqttClient.onUnsubscribe(onMqttUnsubscribe);
   mqttClient.onMessage(handle_mqtt_message);
   mqttClient.onPublish(onMqttPublish);
+  log_d("set up the MQTT callbacks");
 
   connectToWiFi();
   digitalWrite(LED_BUILTIN, LOW);
@@ -199,8 +223,6 @@ void print_temperature(const char *room, const char *temperature)
 
 void show_home_message(const char *message)
 {
-  char buffer[LCD_WIDTH + 1];
-
   struct DisplayMessage home_message;
   home_message.type = home_event_message;
 
@@ -335,7 +357,6 @@ void display_message(const char *topic, const char *message)
 
     show_home_message(topic);
   }
-
 }
 
 void handle_mqtt_message(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)

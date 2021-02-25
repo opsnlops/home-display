@@ -26,20 +26,19 @@ void connectToMqtt()
   while (mqtt_broker_address == DEFAULT_IP_ADDRESS)
   {
     mqtt_broker_address = find_broker(broker_service, broker_protocol);
-    Serial.println("The IP of the broker is " + mqtt_broker_address.toString());
+    log_i("The IP of the broker is %s", mqtt_broker_address.toString().c_str());
   }
 
   mqttClient.setServer(mqtt_broker_address, mqtt_broker_port);
 
-  Serial.println("Connecting to MQTT...");
+  log_i("Connecting to MQTT...");
   mqttClient.connect();
 }
 
 void onMqttConnect(bool sessionPresent)
 {
-  Serial.println("Connected to MQTT.");
-  Serial.print("Session present: ");
-  Serial.println(sessionPresent);
+  log_i("Connected to MQTT.");
+  log_v("Session present: %b", sessionPresent);
 
   // What topics do we care about?
   mqttClient.subscribe(SL_CONNCURRENCY_TOPIC, 0);
@@ -63,7 +62,7 @@ void onMqttConnect(bool sessionPresent)
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
 {
-  Serial.println("Disconnected from MQTT.");
+  log_i("Disconnected from MQTT.");
 
   // Reset the broker to the default
   mqtt_broker_address = DEFAULT_IP_ADDRESS;
@@ -76,25 +75,20 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
 
 void onMqttSubscribe(uint16_t packetId, uint8_t qos)
 {
-  Serial.println("Subscribe acknowledged.");
-  //Serial.print("  packetId: ");
-  //Serial.println(packetId);
-  //Serial.print("  qos: ");
-  //Serial.println(qos);
+  log_d("Subscribe acknowledged.");
+  log_v("  packetId: %d, qos: %d", packetId, qos);
 }
 
 void onMqttUnsubscribe(uint16_t packetId)
 {
-  Serial.println("Unsubscribe acknowledged.");
-  Serial.print("  packetId: ");
-  Serial.println(packetId);
+  log_i("Unsubscribe acknowledged.");
+  log_v("  packetId: %d", packetId);
 }
 
 void onMqttPublish(uint16_t packetId)
 {
-  Serial.println("Publish acknowledged.");
-  Serial.print("  packetId: ");
-  Serial.println(packetId);
+  log_i("Publish acknowledged.");
+  log_v("  packetId: %d", packetId);
 }
 
 void onWifiDisconnect()
