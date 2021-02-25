@@ -11,12 +11,14 @@
 
 const int LED_PIN = LED_BUILTIN;
 
+char* getWifiNetwork()
+{
+    return WIFI_NETWORK;
+}
 
 void connectToWiFi()
 {
-    Serial.print("Connecting to WiFi network: ");
-    Serial.print(WIFI_NETWORK);
-    Serial.print("...");
+    log_i("Connecting to WiFi network: %s", WIFI_NETWORK);
 
     WiFi.begin(WIFI_NETWORK, WIFI_PASSWORD);
 }
@@ -72,33 +74,23 @@ void signal_sos()
 IPAddress find_broker(const char *broker_service, const char *broker_protocol)
 {
 
-    log_v("returning a fake broker IP");
-    return IPAddress(192, 168, 7, 129);
+    //log_v("returning a fake broker IP");
+    //return IPAddress(192, 168, 7, 129);
 
-    Serial.printf("Browsing for service _%s._%s.local. ... ", broker_service, broker_protocol);
+    log_i("Browsing for service _%s._%s.local. ... ", broker_service, broker_protocol);
 
     int n = MDNS.queryService(broker_service, broker_protocol);
     if (n == 0)
     {
-        Serial.println("no services found");
+        log_w("couldn't find the magic broker in mDNS");
     }
     else
     {
-        Serial.print(n);
-        Serial.println(" service(s) found");
+        log_i("%d services(s) found", n);
         for (int i = 0; i < n; ++i)
         {
             // Print details for each service found
-            Serial.print("  ");
-            Serial.print(i + 1);
-            Serial.print(": ");
-            Serial.print(MDNS.hostname(i));
-            Serial.print(" (");
-            Serial.print(MDNS.IP(i));
-            Serial.print(":");
-            Serial.print(MDNS.port(i));
-            Serial.print(") ");
-            Serial.println(MDNS.txt(i, 0));
+            log_d("  %d: %s (%s:%d) role: %s", (i + 1), MDNS.hostname(i), MDNS.IP(i).toString().c_str(), MDNS.port(i), MDNS.txt(i, 0));
 
             // hahah
             return MDNS.IP(i);
