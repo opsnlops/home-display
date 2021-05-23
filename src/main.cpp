@@ -49,6 +49,7 @@ char clock_display[LCD_WIDTH];
 char sl_concurrency[LCD_WIDTH];
 char home_message[LCD_WIDTH];
 char temperature[LCD_WIDTH];
+char wind[LCD_WIDTH];
 
 // Clear the entire LCD and print a message
 void paint_lcd(String top_line, String bottom_line)
@@ -127,6 +128,7 @@ void set_up_lcd()
   memset(sl_concurrency, '\0', LCD_WIDTH);
   memset(home_message, '\0', LCD_WIDTH);
   memset(temperature, '\0', LCD_WIDTH);
+  memset(wind, '\0', LCD_WIDTH);
 
   delay(1000);
 }
@@ -136,7 +138,6 @@ void setup()
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
-
 
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
@@ -242,6 +243,19 @@ void print_temperature(const char *room, const char *temperature)
 
   memset(buffer, '\0', LCD_WIDTH + 1);
   sprintf(message.text, "%s: %sF", room, temperature);
+
+  xQueueSendToBackFromISR(displayQueue, &message, NULL);
+}
+
+void print_wind(const char *wind_speed)
+{
+  char buffer[LCD_WIDTH + 1];
+
+  struct DisplayMessage message;
+  message.type = wind_message;
+
+  memset(buffer, '\0', LCD_WIDTH + 1);
+  sprintf(message.text, "Wind: %s MPH", wind_speed);
 
   xQueueSendToBackFromISR(displayQueue, &message, NULL);
 }
@@ -373,6 +387,10 @@ void display_message(const char *topic, const char *message)
   {
     print_temperature("Outside", message);
   }
+  else if (strncmp(OUTSIDE_WIND_SPEED, topic, topic_length) == 0)
+  {
+    print_wind(message);
+  }
 
   else
   {
@@ -447,17 +465,19 @@ void updateDisplayTask(void *pvParamenters)
           break;
         case temperature_message:
           memcpy(temperature, message.text, LCD_WIDTH);
+          break;
+        case wind_message:
+          memcpy(wind, message.text, LCD_WIDTH);
         }
 
         // The display is buffered, so this just means wipe out what's there
         display.clearDisplay();
         display.setCursor(0, 0);
-        display.setTextSize(2);
         display.println(sl_concurrency);
-        display.setTextSize(1);
         display.println("");
         display.println(home_message);
         display.println(temperature);
+        display.println(wind);
         display.println("");
         display.println("");
         display.print("          ");

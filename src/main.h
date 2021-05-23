@@ -21,7 +21,8 @@ enum MessageType {
   clock_display_message,
   sl_concurrency_message,
   home_event_message,
-  temperature_message
+  temperature_message,
+  wind_message
 };
 
 

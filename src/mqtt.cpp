@@ -61,6 +61,8 @@ void onMqttConnect(bool sessionPresent)
   mqttClient.subscribe(WORKSHOP_TEMPERATURE_TOPIC, 0);
 
   mqttClient.subscribe(OUTSIDE_TEMPERATURE_TOPIC, 0);
+  mqttClient.subscribe(OUTSIDE_WIND_SPEED, 0);
+  //mqttClient.subscribe(OUTSIDE_WIND_BEARING, 0);
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)

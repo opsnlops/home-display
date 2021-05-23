@@ -11,14 +11,14 @@ extern "C"
 
 #define SL_CONNCURRENCY_TOPIC "external/secondlife/concurrency"
 
-#define BATHROOM_MOTION_TOPIC "home/bathroom/motion"
+#define BATHROOM_MOTION_TOPIC "home/hallway_bathroom/motion"
 #define BEDROOM_MOTION_TOPIC "home/bedroom/motion"
 #define OFFICE_MOTION_TOPIC "home/office/motion"
 #define LAUNDRY_ROOM_MOTION_TOPIC "home/laundry_room/motion"
 #define LIVING_ROOM_MOTION_TOPIC "home/living_room/motion"
 #define WORKSHOP_MOTION_TOPIC "home/workshop/motion"
 
-#define BATHROOM_TEMPERATURE_TOPIC "home/bathroom/temperature"
+#define BATHROOM_TEMPERATURE_TOPIC "home/hallway_bathroom/temperature"
 #define BEDROOM_TEMPERATURE_TOPIC "home/bedroom/temperature"
 #define OFFICE_TEMPERATURE_TOPIC "home/office/temperature"
 #define LAUNDRY_ROOM_TEMPERATURE_TOPIC "home/laundry_room/temperature"
@@ -26,6 +26,9 @@ extern "C"
 #define WORKSHOP_TEMPERATURE_TOPIC "home/workshop/temperature"
 
 #define OUTSIDE_TEMPERATURE_TOPIC "home/outside/temperature"
+#define OUTSIDE_WIND_SPEED "home/outside/wind_average"
+#define OUTSIDE_WIND_BEARING "home/outside/wind_bearing"
+#define OUTSIDE_WIND_DIRECTION "home/outside/wind_direction"
 
 
 #define MQTT_ON "on"
