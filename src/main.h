@@ -15,6 +15,7 @@ extern "C"
 
 #define LCD_WIDTH 22
 #define DISPLAY_QUEUE_LENGTH 5
+#define WIND_DIRECTION_SIZE 4
 
 
 enum MessageType {

@@ -51,6 +51,9 @@ char home_message[LCD_WIDTH];
 char temperature[LCD_WIDTH];
 char wind[LCD_WIDTH];
 
+double wind_speed = 0.0;
+char wind_direction[WIND_DIRECTION_SIZE];
+
 // Clear the entire LCD and print a message
 void paint_lcd(String top_line, String bottom_line)
 {
@@ -129,6 +132,7 @@ void set_up_lcd()
   memset(home_message, '\0', LCD_WIDTH);
   memset(temperature, '\0', LCD_WIDTH);
   memset(wind, '\0', LCD_WIDTH);
+  memset(wind_direction, '\0', WIND_DIRECTION_SIZE);
 
   delay(1000);
 }
@@ -247,17 +251,41 @@ void print_temperature(const char *room, const char *temperature)
   xQueueSendToBackFromISR(displayQueue, &message, NULL);
 }
 
-void print_wind(const char *wind_speed)
+void update_wind()
 {
   char buffer[LCD_WIDTH + 1];
+  memset(buffer, '\0', LCD_WIDTH + 1);
 
   struct DisplayMessage message;
   message.type = wind_message;
-
-  memset(buffer, '\0', LCD_WIDTH + 1);
-  sprintf(message.text, "Wind: %s MPH", wind_speed);
+  sprintf(message.text, "Wind: %.01f MPH (%s)", wind_speed, wind_direction);
 
   xQueueSendToBackFromISR(displayQueue, &message, NULL);
+}
+
+
+void print_wind_speed(const char *wind_speed_as_string)
+{
+  log_d("entering print_wind_speed");
+
+  // Convert the message to a double
+  wind_speed = atof(wind_speed_as_string);
+  log_d("coverted while to double");
+
+  update_wind();
+}
+
+
+void print_wind_direction(const char *wind_direction_as_string)
+{
+  log_d("entering print_wind_direction");
+
+  int string_size = strlen(wind_direction_as_string);
+
+  memset(wind_direction, '\0', WIND_DIRECTION_SIZE);
+  memcpy(wind_direction, wind_direction_as_string, ((string_size < WIND_DIRECTION_SIZE) ? string_size : WIND_DIRECTION_SIZE));
+
+  update_wind();
 }
 
 void show_home_message(const char *message)
@@ -389,7 +417,11 @@ void display_message(const char *topic, const char *message)
   }
   else if (strncmp(OUTSIDE_WIND_SPEED, topic, topic_length) == 0)
   {
-    print_wind(message);
+    print_wind_speed(message);
+  }
+  else if (strncmp(OUTSIDE_WIND_DIRECTION, topic, topic_length) == 0)
+  {
+    print_wind_direction(message);
   }
 
   else
