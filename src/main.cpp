@@ -22,9 +22,7 @@ extern "C"
 #include <Adafruit_SSD1325.h>
 
 #include "creature.h"
-#include "secrets.h"
 #include "mqtt.h"
-#include "connection.h"
 
 #include "logging/logging.h"
 #include "network/connection.h"
@@ -104,17 +102,16 @@ void WiFiEvent(WiFiEvent_t event)
     switch (event)
     {
     case SYSTEM_EVENT_WIFI_READY:
-        log_d("wifi ready");
+        l.debug("wifi ready");
         break;
     case SYSTEM_EVENT_STA_GOT_IP:
-        log_i("WiFi connected");
-        log_i("IP address: %s", WiFi.localIP().toString().c_str());
+        l.info("WiFi connected");
+        l.info("IP address: %s", WiFi.localIP().toString().c_str());
         show_startup(WiFi.localIP().toString());
-        connectToMqtt();
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
-        log_w("WiFi lost connection");
-        show_error("Unable to connect to Wifi network", getWifiNetwork());
+        l.warning("WiFi lost connection");
+        show_error("Unable to connect to Wifi network", ":(");
         xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
         xTimerStart(wifiReconnectTimer, 0);
         onWifiDisconnect(); // Tell the broker we lost Wifi
@@ -124,7 +121,7 @@ void WiFiEvent(WiFiEvent_t event)
 
 void set_up_lcd()
 {
-    log_i("setting up the OLED display");
+    l.info("setting up the OLED display");
     display.begin();
     display.display();
     delay(1000);
@@ -168,14 +165,23 @@ void setup()
     creatureMDNS.registerService(666);
     creatureMDNS.addStandardTags();
 
+    Time time = Time();
+    time.init();
+    time.obtainTime();
 
-    //mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
-    //wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
-    //log_d("created the timers");
-    //show_startup("timers made");
+    // Get the location of the magic broker
+    MagicBroker magicBroker;
+    magicBroker.find();
+
+    connectToMqtt(magicBroker.ipAddress, magicBroker.port);
+
+    // mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
+    // wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
+    // l.debug("created the timers");
+    // show_startup("timers made");
 
     WiFi.onEvent(WiFiEvent);
-    log_d("setup the Wifi event handler");
+    l.debug("setup the Wifi event handler");
     show_startup("Wifi event timer made");
 
     mqttClient.onConnect(onMqttConnect);
@@ -184,17 +190,11 @@ void setup()
     mqttClient.onUnsubscribe(onMqttUnsubscribe);
     mqttClient.onMessage(handle_mqtt_message);
     mqttClient.onPublish(onMqttPublish);
-    log_d("set up the MQTT callbacks");
+    l.debug("set up the MQTT callbacks");
 
     show_startup("starting up Wifi");
-    connectToWiFi();
     digitalWrite(LED_BUILTIN, LOW);
 
-    // TODO: Remove this, don't talk to the Internet
-    const char *ntpServer = "pool.ntp.org";
-    const long gmtOffset_sec = -28800;
-    const int daylightOffset_sec = 3600;
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
     show_startup("NTP configured");
 
     xTaskCreate(updateDisplayTask,
@@ -469,7 +469,7 @@ void updateDisplayTask(void *pvParamenters)
                 Serial.print(", size: ");
                 Serial.println(sizeof(message));
 #else
-                log_d("message read from queue: %s", message.text);
+                l.debug("message read from queue: %s", message.text);
 #endif
             }
         }
@@ -503,7 +503,7 @@ void printLocalTimeTask(void *pvParameters)
         }
         else
         {
-            log_w("Failed to obtain time");
+            l.warning("Failed to obtain time");
         }
 
         // Wait before repeating

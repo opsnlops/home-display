@@ -9,6 +9,8 @@ extern "C"
 }
 #include <AsyncMqttClient.h>
 
+#include "logging/logging.h"
+
 #define SL_CONNCURRENCY_TOPIC "external/secondlife/concurrency"
 
 #define BATHROOM_MOTION_TOPIC "home/bathroom/motion"
@@ -31,7 +33,7 @@ extern "C"
 #define MQTT_ON "on"
 #define MQTT_OFF "off"
 
-void connectToMqtt();
+void connectToMqtt(IPAddress mqtt_broker_address, uint16_t mqtt_broker_port);
 void onMqttConnect(bool sessionPresent);
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason);
 void onMqttSubscribe(uint16_t packetId, uint8_t qos);
