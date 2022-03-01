@@ -18,6 +18,7 @@ extern TimerHandle_t mqttReconnectTimer;
 void connectToMqtt(IPAddress mqtt_broker_address, uint16_t mqtt_broker_port)
 {
 
+  l.debug("Trying to connect to MQTT");
   mqttClient.setServer(mqtt_broker_address, mqtt_broker_port);
 
   l.info("Connecting to MQTT...");
@@ -28,7 +29,7 @@ void connectToMqtt(IPAddress mqtt_broker_address, uint16_t mqtt_broker_port)
 void onMqttConnect(bool sessionPresent)
 {
   l.info("Connected to MQTT.");
-  log_v("Session present: %b", sessionPresent);
+  l.verbose("Session present: %b", sessionPresent);
   show_startup("Connected to MQTT");
 
   // What topics do we care about?
@@ -64,19 +65,19 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
 void onMqttSubscribe(uint16_t packetId, uint8_t qos)
 {
   l.debug("Subscribe acknowledged.");
-  log_v("  packetId: %d, qos: %d", packetId, qos);
+  l.verbose("  packetId: %d, qos: %d", packetId, qos);
 }
 
 void onMqttUnsubscribe(uint16_t packetId)
 {
   l.info("Unsubscribe acknowledged.");
-  log_v("  packetId: %d", packetId);
+  l.verbose("  packetId: %d", packetId);
 }
 
 void onMqttPublish(uint16_t packetId)
 {
   l.info("Publish acknowledged.");
-  log_v("  packetId: %d", packetId);
+  l.verbose("  packetId: %d", packetId);
 }
 
 void onWifiDisconnect()

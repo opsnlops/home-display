@@ -6,7 +6,6 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include <WiFi.h>
 extern "C"
 {
 #include "freertos/FreeRTOS.h"
@@ -180,9 +179,9 @@ void setup()
     // l.debug("created the timers");
     // show_startup("timers made");
 
-    WiFi.onEvent(WiFiEvent);
-    l.debug("setup the Wifi event handler");
-    show_startup("Wifi event timer made");
+    //WiFi.onEvent(WiFiEvent);
+    //l.debug("setup the Wifi event handler");
+    //show_startup("Wifi event timer made");
 
     mqttClient.onConnect(onMqttConnect);
     mqttClient.onDisconnect(onMqttDisconnect);
@@ -195,8 +194,7 @@ void setup()
     show_startup("starting up Wifi");
     digitalWrite(LED_BUILTIN, LOW);
 
-    show_startup("NTP configured");
-
+    /*
     xTaskCreate(updateDisplayTask,
                 "updateDisplayTask",
                 2048,
@@ -210,6 +208,7 @@ void setup()
                 NULL,
                 1,
                 &localTimeTaskHandler);
+    */
     show_startup("timers running");
 }
 
