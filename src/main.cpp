@@ -137,9 +137,8 @@ void setup()
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
 
-
   // Open serial communications and wait for port to open:
-  Serial.begin(9600);
+  Serial.begin(19200);
   while (!Serial)
     ;
   log_i("--- STARTED UP ---");
