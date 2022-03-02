@@ -15,20 +15,20 @@ extern "C"
 
 #include "main.h"
 
-#include <AsyncMqttClient.h>
-#include "time.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1325.h>
 
 #include "creature.h"
-#include "mqtt.h"
 
 #include "logging/logging.h"
 #include "network/connection.h"
 #include "creatures/creatures.h"
+#include "mqtt/mqtt.h"
 #include "time/time.h"
 #include "mdns/creature-mdns.h"
 #include "mdns/magicbroker.h"
+
+#include "ota.h"
 
 using namespace creatures;
 
@@ -57,6 +57,7 @@ char temperature[LCD_WIDTH];
 
 // Keep a link to our logger
 static Logger l;
+static MQTT mqtt = MQTT(String(CREATURE_NAME));
 
 // Clear the entire LCD and print a message
 void paint_lcd(String top_line, String bottom_line)
@@ -113,7 +114,7 @@ void WiFiEvent(WiFiEvent_t event)
         show_error("Unable to connect to Wifi network", ":(");
         xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
         xTimerStart(wifiReconnectTimer, 0);
-        onWifiDisconnect(); // Tell the broker we lost Wifi
+        // onWifiDisconnect(); // Tell the broker we lost Wifi
         break;
     }
 }
@@ -156,6 +157,7 @@ void setup()
     displayQueue = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct DisplayMessage));
     show_startup("queue made");
 
+    show_startup("starting up Wifi");
     NetworkConnection network = NetworkConnection();
     network.connectToWiFi();
 
@@ -172,27 +174,14 @@ void setup()
     MagicBroker magicBroker;
     magicBroker.find();
 
-    connectToMqtt(magicBroker.ipAddress, magicBroker.port);
+    // Connect to MQTT
+    mqtt.connect(magicBroker.ipAddress, magicBroker.port);
+    mqtt.subscribe(String("cmd"), 0);
 
     // mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
     // wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
     // l.debug("created the timers");
     // show_startup("timers made");
-
-    //WiFi.onEvent(WiFiEvent);
-    //l.debug("setup the Wifi event handler");
-    //show_startup("Wifi event timer made");
-
-    mqttClient.onConnect(onMqttConnect);
-    mqttClient.onDisconnect(onMqttDisconnect);
-    mqttClient.onSubscribe(onMqttSubscribe);
-    mqttClient.onUnsubscribe(onMqttUnsubscribe);
-    mqttClient.onMessage(handle_mqtt_message);
-    mqttClient.onPublish(onMqttPublish);
-    l.debug("set up the MQTT callbacks");
-
-    show_startup("starting up Wifi");
-    digitalWrite(LED_BUILTIN, LOW);
 
     /*
     xTaskCreate(updateDisplayTask,
@@ -208,8 +197,30 @@ void setup()
                 NULL,
                 1,
                 &localTimeTaskHandler);
-    */
+
     show_startup("timers running");
+     */
+
+    // Enable OTA
+    setup_ota(String(CREATURE_NAME));
+    start_ota();
+
+    // Tell MQTT we're alive
+    mqtt.publish(String("status"), String("I'm alive!!"), 0, false);
+    mqtt.startHeartbeat();
+
+    digitalWrite(LED_BUILTIN, LOW);
+
+    // Start the task to read the queue
+    l.debug("starting the message reader task");
+    TaskHandle_t messageReaderTaskHandle;
+    xTaskCreatePinnedToCore(messageQueueReaderTask,
+                            "messageQueueReaderTask",
+                            10240,
+                            NULL,
+                            1,
+                            &messageReaderTaskHandle,
+                            1);
 }
 
 // Stolen from StackOverflow
@@ -510,6 +521,22 @@ void printLocalTimeTask(void *pvParameters)
     }
 }
 
+// Read from the queue and print it to the screen for now
+portTASK_FUNCTION(messageQueueReaderTask, pvParameters)
+{
+
+    QueueHandle_t incomingQueue = mqtt.getIncomingMessageQueue();
+    for (;;)
+    {
+        struct MqttMessage message;
+        if (xQueueReceive(incomingQueue, &message, (TickType_t)5000) == pdPASS)
+        {
+            l.info("Incoming message! topic: %s, payload: %s", message.topic, message.payload);
+        }
+    }
+}
+
 void loop()
 {
+    vTaskDelete(NULL);
 }
