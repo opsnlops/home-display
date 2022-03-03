@@ -32,7 +32,6 @@ extern "C"
 
 using namespace creatures;
 
-extern AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
 TimerHandle_t wifiReconnectTimer;
 
@@ -383,51 +382,11 @@ void display_message(const char *topic, const char *message)
 
     else
     {
-        Serial.print(topic);
-        Serial.print(" ");
-        Serial.println(message);
-
+        l.warning("Unknown message! topic: %s, message %s", topic, message);
         show_home_message(topic);
     }
 }
 
-void handle_mqtt_message(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
-{
-    digitalWrite(LED_BUILTIN, HIGH);
-
-    // MQTT allows binary content to be passed, so payload will arrive without a
-    // NUL at the end. Let's add one so we can print it out properly!
-    char payload_string[len + 1];
-    memset(payload_string, '\0', len + 1);
-    memcpy(payload_string, payload, len);
-
-#ifdef CREATURE_DEBUG
-
-    Serial.println("Message received:");
-    Serial.print("  topic: ");
-    Serial.println(topic);
-    Serial.print("  payload: ");
-    Serial.println(payload_string);
-    Serial.print("  qos: ");
-    Serial.println(properties.qos);
-    Serial.print("  dup: ");
-    Serial.println(properties.dup);
-    Serial.print("  retain: ");
-    Serial.println(properties.retain);
-    Serial.print("  len: ");
-    Serial.println(len);
-    Serial.print("  index: ");
-    Serial.println(index);
-    Serial.print("  total: ");
-    Serial.println(total);
-
-#endif
-
-    // Go print the message
-    display_message(topic, payload_string);
-
-    digitalWrite(LED_BUILTIN, LOW);
-}
 
 void updateDisplayTask(void *pvParamenters)
 {
@@ -531,7 +490,8 @@ portTASK_FUNCTION(messageQueueReaderTask, pvParameters)
         struct MqttMessage message;
         if (xQueueReceive(incomingQueue, &message, (TickType_t)5000) == pdPASS)
         {
-            l.info("Incoming message! topic: %s, payload: %s", message.topic, message.payload);
+            l.debug("Incoming message! topic: %s, payload: %s", message.topic, message.payload);
+            display_message(message.topic, message.payload);
         }
     }
 }
