@@ -177,19 +177,23 @@ void setup()
     mqtt.connect(magicBroker.ipAddress, magicBroker.port);
     mqtt.subscribe(String("cmd"), 0);
 
+    mqtt.subscribeGlobalNamespace(OUTSIDE_TEMPERATURE_TOPIC, 0);
+    mqtt.subscribeGlobalNamespace(OUTSIDE_WIND_SPEED_TOPIC, 0);
+    mqtt.subscribeGlobalNamespace(FAMILY_ROOM_TEMPERATURE_TOPIC, 0);
+
     // mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
     // wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
     // l.debug("created the timers");
     // show_startup("timers made");
 
-    /*
+     /*
     xTaskCreate(updateDisplayTask,
                 "updateDisplayTask",
-                2048,
+                10240,
                 NULL,
                 2,
                 &displayUpdateTaskHandler);
-
+   
     xTaskCreate(printLocalTimeTask,
                 "printLocalTimeTask",
                 2048,
@@ -241,6 +245,7 @@ char *ultoa(unsigned long val, char *s)
 // a bug here if the length of the string is too big, it'll crash.
 void print_temperature(const char *room, const char *temperature)
 {
+    l.debug("printing temperature, room: %s", room);
     char buffer[LCD_WIDTH + 1];
 
     struct DisplayMessage message;
@@ -366,9 +371,9 @@ void display_message(const char *topic, const char *message)
     {
         print_temperature("Laundry", message);
     }
-    else if (strncmp(LIVING_ROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+    else if (strncmp(FAMILY_ROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
     {
-        print_temperature("Living Room", message);
+        print_temperature("Family Room", message);
     }
     else if (strncmp(WORKSHOP_TEMPERATURE_TOPIC, topic, topic_length) == 0)
     {
@@ -387,8 +392,7 @@ void display_message(const char *topic, const char *message)
     }
 }
 
-
-void updateDisplayTask(void *pvParamenters)
+portTASK_FUNCTION(updateDisplayTask, pvParameters)
 {
 
     struct DisplayMessage message;
@@ -431,12 +435,8 @@ void updateDisplayTask(void *pvParamenters)
                 display.display();
 
 #ifdef CREATURE_DEBUG
-                Serial.print("Read message from queue: type: ");
-                Serial.print(message.type);
-                Serial.print(", text: ");
-                Serial.print(message.text);
-                Serial.print(", size: ");
-                Serial.println(sizeof(message));
+
+                l.debug("Read message from queue: type: %s, text: %s, size: %d", message.type, message.text, sizeof(message));
 #else
                 l.debug("message read from queue: %s", message.text);
 #endif
@@ -490,7 +490,10 @@ portTASK_FUNCTION(messageQueueReaderTask, pvParameters)
         struct MqttMessage message;
         if (xQueueReceive(incomingQueue, &message, (TickType_t)5000) == pdPASS)
         {
-            l.debug("Incoming message! topic: %s, payload: %s", message.topic, message.payload);
+            l.debug("Incoming message! local topic: %s, global topic: %s, payload: %s",
+                    message.topic,
+                    message.topicGlobalNamespace,
+                    message.payload);
             display_message(message.topic, message.payload);
         }
     }

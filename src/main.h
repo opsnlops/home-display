@@ -17,10 +17,11 @@
 #define BEDROOM_TEMPERATURE_TOPIC "home/bedroom/temperature"
 #define OFFICE_TEMPERATURE_TOPIC "home/office/temperature"
 #define LAUNDRY_ROOM_TEMPERATURE_TOPIC "home/laundry_room/temperature"
-#define LIVING_ROOM_TEMPERATURE_TOPIC "home/living_room/temperature"
+#define FAMILY_ROOM_TEMPERATURE_TOPIC "home/family_room/temperature"
 #define WORKSHOP_TEMPERATURE_TOPIC "home/workshop/temperature"
 
 #define OUTSIDE_TEMPERATURE_TOPIC "home/outside/temperature"
+#define OUTSIDE_WIND_SPEED_TOPIC "home/outside/wind_speed"
 
 #define MQTT_ON "on"
 #define MQTT_OFF "off"
@@ -61,7 +62,6 @@ void set_up_lcd();
 void show_startup(String line1);
 void show_error(String line1, String line2);
 void paint_lcd(String top_line, String bottom_line);
-void updateDisplayTask(void *pvParamenters);
 void printLocalTimeTask(void *pvParameters);
 
 void print_temperature(const char *room, const char *temperature);
@@ -70,5 +70,5 @@ void display_message(const char *topic, const char *message);
 void handle_mqtt_message(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total);
 
 portTASK_FUNCTION_PROTO(messageQueueReaderTask, pvParameters);
-
+portTASK_FUNCTION_PROTO(updateDisplayTask, pvParameters);
 #endif
