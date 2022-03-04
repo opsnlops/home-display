@@ -1,27 +1,8 @@
 
-#ifndef _APRILS_CREATRES_HOME_DISPLAY
-#define _APRILS_CREATRES_HOME_DISPLAY
+#pragma once
 
 #include <WiFi.h>
 
-#define SL_CONNCURRENCY_TOPIC "external/secondlife/concurrency"
-
-#define BATHROOM_MOTION_TOPIC "home/bathroom/motion"
-#define BEDROOM_MOTION_TOPIC "home/bedroom/motion"
-#define OFFICE_MOTION_TOPIC "home/office/motion"
-#define LAUNDRY_ROOM_MOTION_TOPIC "home/laundry_room/motion"
-#define LIVING_ROOM_MOTION_TOPIC "home/living_room/motion"
-#define WORKSHOP_MOTION_TOPIC "home/workshop/motion"
-
-#define BATHROOM_TEMPERATURE_TOPIC "home/bathroom/temperature"
-#define BEDROOM_TEMPERATURE_TOPIC "home/bedroom/temperature"
-#define OFFICE_TEMPERATURE_TOPIC "home/office/temperature"
-#define LAUNDRY_ROOM_TEMPERATURE_TOPIC "home/laundry_room/temperature"
-#define FAMILY_ROOM_TEMPERATURE_TOPIC "home/family_room/temperature"
-#define WORKSHOP_TEMPERATURE_TOPIC "home/workshop/temperature"
-
-#define OUTSIDE_TEMPERATURE_TOPIC "home/outside/temperature"
-#define OUTSIDE_WIND_SPEED_TOPIC "home/outside/wind_speed"
 
 #define MQTT_ON "on"
 #define MQTT_OFF "off"
@@ -71,4 +52,3 @@ void handle_mqtt_message(char *topic, char *payload, AsyncMqttClientMessagePrope
 
 portTASK_FUNCTION_PROTO(messageQueueReaderTask, pvParameters);
 portTASK_FUNCTION_PROTO(updateDisplayTask, pvParameters);
-#endif

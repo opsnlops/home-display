@@ -27,6 +27,7 @@ extern "C"
 #include "time/time.h"
 #include "mdns/creature-mdns.h"
 #include "mdns/magicbroker.h"
+#include "home/data-feed.h"
 
 #include "ota.h"
 
@@ -179,30 +180,38 @@ void setup()
 
     mqtt.subscribeGlobalNamespace(OUTSIDE_TEMPERATURE_TOPIC, 0);
     mqtt.subscribeGlobalNamespace(OUTSIDE_WIND_SPEED_TOPIC, 0);
+
+    mqtt.subscribeGlobalNamespace(BUNNYS_ROOM_TEMPERATURE_TOPIC, 0);
     mqtt.subscribeGlobalNamespace(FAMILY_ROOM_TEMPERATURE_TOPIC, 0);
+    mqtt.subscribeGlobalNamespace(GUEST_ROOM_TEMPERATURE_TOPIC, 0);
+    mqtt.subscribeGlobalNamespace(KITCHEN_TEMPERATURE_TOPIC, 0);
+    mqtt.subscribeGlobalNamespace(OFFICE_TEMPERATURE_TOPIC, 0);
+
+    mqtt.subscribeGlobalNamespace(FAMILY_ROOM_FLAMETHROWER_TOPIC, 0);
+    mqtt.subscribeGlobalNamespace(OFFICE_FLAMETHROWER_TOPIC, 0);
 
     // mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
     // wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
     // l.debug("created the timers");
     // show_startup("timers made");
 
-     /*
-    xTaskCreate(updateDisplayTask,
-                "updateDisplayTask",
-                10240,
-                NULL,
-                2,
-                &displayUpdateTaskHandler);
-   
-    xTaskCreate(printLocalTimeTask,
-                "printLocalTimeTask",
-                2048,
-                NULL,
-                1,
-                &localTimeTaskHandler);
+    /*
+   xTaskCreate(updateDisplayTask,
+               "updateDisplayTask",
+               10240,
+               NULL,
+               2,
+               &displayUpdateTaskHandler);
 
-    show_startup("timers running");
-     */
+   xTaskCreate(printLocalTimeTask,
+               "printLocalTimeTask",
+               2048,
+               NULL,
+               1,
+               &localTimeTaskHandler);
+
+   show_startup("timers running");
+    */
 
     // Enable OTA
     setup_ota(String(CREATURE_NAME));
@@ -273,31 +282,15 @@ void show_home_message(const char *message)
 void display_message(const char *topic, const char *message)
 {
     int topic_length = strlen(topic);
-    if (strncmp(SL_CONNCURRENCY_TOPIC, topic, topic_length) == 0)
-    {
-        unsigned long concurrency = atol(message);
-        char buffer[14];
-        char *number_string = ultoa(concurrency, buffer);
-
-        struct DisplayMessage update_message;
-        update_message.type = sl_concurrency_message;
-        memcpy(&update_message.text, number_string, sizeof(buffer));
-        xQueueSendToBackFromISR(displayQueue, &update_message, NULL);
-
-#ifdef CREATURE_DEBUG
-        Serial.print("processed SL concurrency: ");
-        Serial.println(ultoa(concurrency, buffer));
-#endif
-    }
-    else if (strncmp(BATHROOM_MOTION_TOPIC, topic, topic_length) == 0)
+    if (strncmp(HALLWAY_BATHROOM_MOTION_TOPIC, topic, topic_length) == 0)
     {
         if (strncmp(MQTT_ON, message, 2) == 0)
         {
-            show_home_message("Bathroom Motion");
+            show_home_message("Hallway Bathroom Motion");
         }
         else
         {
-            show_home_message("Bathroom Cleared");
+            show_home_message("Hallway Bathroom Cleared");
         }
     }
     else if (strncmp(BEDROOM_MOTION_TOPIC, topic, topic_length) == 0)
@@ -322,17 +315,6 @@ void display_message(const char *topic, const char *message)
             show_home_message("Office Cleared");
         }
     }
-    else if (strncmp(LAUNDRY_ROOM_MOTION_TOPIC, topic, topic_length) == 0)
-    {
-        if (strncmp(MQTT_ON, message, 2) == 0)
-        {
-            show_home_message("Laundry Room Motion");
-        }
-        else
-        {
-            show_home_message("Laundry Room Cleared");
-        }
-    }
     else if (strncmp(LIVING_ROOM_MOTION_TOPIC, topic, topic_length) == 0)
     {
         if (strncmp(MQTT_ON, message, 2) == 0)
@@ -355,21 +337,17 @@ void display_message(const char *topic, const char *message)
             show_home_message("Workshop Cleared");
         }
     }
-    else if (strncmp(BATHROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+    else if (strncmp(HALF_BATHROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
     {
-        print_temperature("Bathroom", message);
+        print_temperature("Half Bathroom", message);
     }
-    else if (strncmp(BEDROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+    else if (strncmp(BUNNYS_ROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
     {
-        print_temperature("Bedroom", message);
+        print_temperature("Bunny's Room", message);
     }
     else if (strncmp(OFFICE_TEMPERATURE_TOPIC, topic, topic_length) == 0)
     {
         print_temperature("Office", message);
-    }
-    else if (strncmp(LAUNDRY_ROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
-    {
-        print_temperature("Laundry", message);
     }
     else if (strncmp(FAMILY_ROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
     {
