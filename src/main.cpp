@@ -190,6 +190,8 @@ void setup()
     mqtt.subscribeGlobalNamespace(FAMILY_ROOM_FLAMETHROWER_TOPIC, 0);
     mqtt.subscribeGlobalNamespace(OFFICE_FLAMETHROWER_TOPIC, 0);
 
+    mqtt.subscribeGlobalNamespace(HOME_POWER_USE_WATTS, 0);
+
     // mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
     // wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
     // l.debug("created the timers");
