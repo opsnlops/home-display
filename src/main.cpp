@@ -67,9 +67,16 @@ uint8_t startup_counter = 0;
 Adafruit_SSD1325 display(OLED_DC, OLED_RESET, OLED_CS);
 
 // I'll most likely need to figure out a better way to do this, but this will work for now
+char home_status[LCD_WIDTH];
+char flamethrower_display[LCD_WIDTH];
 char clock_display[LCD_WIDTH];
 char home_message[LCD_WIDTH];
 char temperature[LCD_WIDTH];
+
+// Current state of things
+float gOutsideTemperature = 32.0;
+float gWindSpeed = 0.0;
+float gHousePower = 500.0;
 
 // Keep a link to our logger
 static Logger l;
@@ -147,9 +154,11 @@ void set_up_lcd()
     paint_lcd(CREATURE_NAME, "Starting up...");
 
     // Initialize our display vars
+    memset(home_status, '\0', LCD_WIDTH);
     memset(clock_display, '\0', LCD_WIDTH);
     memset(home_message, '\0', LCD_WIDTH);
     memset(temperature, '\0', LCD_WIDTH);
+    memset(flamethrower_display, '\0', LCD_WIDTH);
 
     delay(1000);
 }
@@ -164,10 +173,6 @@ void setup()
 
     l.info("--- STARTED UP ---");
 
-    // Create the message queue
-    displayQueue = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct DisplayMessage));
-    show_startup("displayQueue made");
-
     // Get the display set up
     set_up_lcd();
     show_startup("display set up");
@@ -176,25 +181,35 @@ void setup()
     NetworkConnection network = NetworkConnection();
     network.connectToWiFi();
 
+    // Create the message queue
+    displayQueue = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct DisplayMessage));
+    l.debug("displayQueue made");
+
     // Register ourselves in mDNS
+    show_startup("Starting in mDNS");
     CreatureMDNS creatureMDNS = CreatureMDNS(CREATURE_NAME, CREATURE_POWER);
     creatureMDNS.registerService(666);
     creatureMDNS.addStandardTags();
 
+    // Set the time
+    show_startup("Setting time");
     Time time = Time();
     time.init();
     time.obtainTime();
 
     // Get the location of the magic broker
+    show_startup("Finding the broker");
     MagicBroker magicBroker;
     magicBroker.find();
 
     // Connect to MQTT
+    show_startup("Starting MQTT");
     mqtt.connect(magicBroker.ipAddress, magicBroker.port);
     mqtt.subscribe(String("cmd"), 0);
 
     mqtt.subscribeGlobalNamespace(OUTSIDE_TEMPERATURE_TOPIC, 0);
     mqtt.subscribeGlobalNamespace(OUTSIDE_WIND_SPEED_TOPIC, 0);
+    mqtt.subscribeGlobalNamespace(HOME_POWER_USE_WATTS, 0);
 
     mqtt.subscribeGlobalNamespace(BUNNYS_ROOM_TEMPERATURE_TOPIC, 0);
     mqtt.subscribeGlobalNamespace(FAMILY_ROOM_TEMPERATURE_TOPIC, 0);
@@ -204,8 +219,6 @@ void setup()
 
     mqtt.subscribeGlobalNamespace(FAMILY_ROOM_FLAMETHROWER_TOPIC, 0);
     mqtt.subscribeGlobalNamespace(OFFICE_FLAMETHROWER_TOPIC, 0);
-
-    // mqtt.subscribeGlobalNamespace(HOME_POWER_USE_WATTS, 0);
 
     // mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
     // wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
@@ -278,6 +291,24 @@ void print_temperature(const char *room, const char *temperature)
 
     memset(buffer, '\0', LCD_WIDTH + 1);
     sprintf(message.text, "%s: %sF", room, temperature);
+
+    xQueueSendToBackFromISR(displayQueue, &message, NULL);
+}
+
+void print_flamethrower(const char *room, boolean on)
+{
+    l.debug("printing flamethrower, room: %s", room);
+    char buffer[LCD_WIDTH + 1];
+
+    char *action = "Off";
+    if (on)
+        action = "On";
+
+    struct DisplayMessage message;
+    message.type = flamethrower_message;
+
+    memset(buffer, '\0', LCD_WIDTH + 1);
+    sprintf(message.text, "%s %s", room, action);
 
     xQueueSendToBackFromISR(displayQueue, &message, NULL);
 }
@@ -373,17 +404,66 @@ void display_message(const char *topic, const char *message)
     {
         print_temperature("Workshop", message);
     }
+     else if (strncmp(GUEST_ROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+    {
+        print_temperature("Guest Room", message);
+    }
+     else if (strncmp(KITCHEN_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+    {
+        print_temperature("Kitchen", message);
+    }
 
     else if (strncmp(OUTSIDE_TEMPERATURE_TOPIC, topic, topic_length) == 0)
     {
-        print_temperature("Outside", message);
+        gOutsideTemperature = atof(message);
+        updateHouseStatus();
     }
 
+    else if (strncmp(OUTSIDE_WIND_SPEED_TOPIC, topic, topic_length) == 0)
+    {
+        gWindSpeed = atof(message);
+        updateHouseStatus();
+    }
+
+    else if (strncmp(HOME_POWER_USE_WATTS, topic, topic_length) == 0)
+    {
+        gHousePower = atof(message);
+        updateHouseStatus();
+    }
+
+    else if (strncmp(FAMILY_ROOM_FLAMETHROWER_TOPIC, topic, topic_length) == 0)
+    {
+        if (strncmp("false", message, strlen(message)) == 0)
+        {
+            print_flamethrower("Family Room", false);
+        }
+        else
+        {
+            print_flamethrower("Family Room", true);
+        }
+    }
+    else if (strncmp(OFFICE_FLAMETHROWER_TOPIC, topic, topic_length) == 0)
+    {
+        if (strncmp("false", message, strlen(message)) == 0)
+        {
+            print_flamethrower("Office", false);
+        }
+        else
+        {
+            print_flamethrower("Office", true);
+        }
+    }
     else
     {
         l.warning("Unknown message! topic: %s, message %s", topic, message);
-        show_home_message(topic);
+        // show_home_message(topic);
     }
+}
+
+void updateHouseStatus()
+{
+    // Update the array that holds the information for the overall status
+    sprintf(home_status, "%.1fF %.1fMPH %.1fW", gOutsideTemperature, gWindSpeed, gHousePower);
 }
 
 portTASK_FUNCTION(updateDisplayTask, pvParameters)
@@ -406,6 +486,9 @@ portTASK_FUNCTION(updateDisplayTask, pvParameters)
                     case home_event_message:
                         memcpy(home_message, message.text, LCD_WIDTH);
                         break;
+                    case flamethrower_message:
+                        memcpy(flamethrower_display, message.text, LCD_WIDTH);
+                        break;
                     case clock_display_message:
                         memcpy(clock_display, message.text, LCD_WIDTH);
                         break;
@@ -417,7 +500,9 @@ portTASK_FUNCTION(updateDisplayTask, pvParameters)
                     display.clearDisplay();
                     display.setCursor(0, 0);
                     display.setTextSize(1);
+                    display.println(home_status);
                     display.println("");
+                    display.println(flamethrower_display);
                     display.println(home_message);
                     display.println(temperature);
                     display.println("");
@@ -450,10 +535,7 @@ void printLocalTimeTask(void *pvParameters)
             message.type = clock_display_message;
 
             strftime(message.text, LCD_WIDTH, "%I:%M:%S %p", &timeinfo);
-
-#ifdef CREATURE_DEBUG
             l.verbose("Current time: %s", message.text);
-#endif
 
             // Drop this message into the queue, giving up after 500ms if there's no
             // space in the queue

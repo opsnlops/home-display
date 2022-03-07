@@ -22,7 +22,7 @@ extern "C"
 
 enum MessageType {
   clock_display_message,
-  sl_concurrency_message,
+  flamethrower_message,
   home_event_message,
   temperature_message
 };
@@ -44,6 +44,8 @@ void show_startup(String line1);
 void show_error(String line1, String line2);
 void paint_lcd(String top_line, String bottom_line);
 void printLocalTimeTask(void *pvParameters);
+void updateHouseStatus();
+void print_flamethrower(const char *room, boolean on);
 
 void print_temperature(const char *room, const char *temperature);
 void display_message(const char *topic, const char *message);
