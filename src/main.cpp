@@ -3,6 +3,23 @@
 #error This code is intended to run only on the ESP32 board
 #endif
 
+/*
+    Wiring Notes!
+
+    These are GPIO numbers, not pin numbers.
+
+    ESP32           OLED          What
+    15              16            Reset
+    17              4             DC (Data / Command)
+    5               15            CS (Chip Select)
+    18              7             Clock
+    23              8             Data In
+
+
+    Also note that it runs on v3.3, not v5.
+
+*/
+
 #include <Arduino.h>
 #include <Wire.h>
 
@@ -46,12 +63,11 @@ uint8_t startup_counter = 0;
 
 #define OLED_CS 5
 #define OLED_RESET 15
-#define OLED_DC 13
+#define OLED_DC 17
 Adafruit_SSD1325 display(OLED_DC, OLED_RESET, OLED_CS);
 
 // I'll most likely need to figure out a better way to do this, but this will work for now
 char clock_display[LCD_WIDTH];
-char sl_concurrency[LCD_WIDTH];
 char home_message[LCD_WIDTH];
 char temperature[LCD_WIDTH];
 
@@ -132,7 +148,6 @@ void set_up_lcd()
 
     // Initialize our display vars
     memset(clock_display, '\0', LCD_WIDTH);
-    memset(sl_concurrency, '\0', LCD_WIDTH);
     memset(home_message, '\0', LCD_WIDTH);
     memset(temperature, '\0', LCD_WIDTH);
 
@@ -149,13 +164,13 @@ void setup()
 
     l.info("--- STARTED UP ---");
 
+    // Create the message queue
+    displayQueue = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct DisplayMessage));
+    show_startup("displayQueue made");
+
     // Get the display set up
     set_up_lcd();
     show_startup("display set up");
-
-    // Create the message queue
-    displayQueue = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct DisplayMessage));
-    show_startup("queue made");
 
     show_startup("starting up Wifi");
     NetworkConnection network = NetworkConnection();
@@ -190,30 +205,29 @@ void setup()
     mqtt.subscribeGlobalNamespace(FAMILY_ROOM_FLAMETHROWER_TOPIC, 0);
     mqtt.subscribeGlobalNamespace(OFFICE_FLAMETHROWER_TOPIC, 0);
 
-    mqtt.subscribeGlobalNamespace(HOME_POWER_USE_WATTS, 0);
+    // mqtt.subscribeGlobalNamespace(HOME_POWER_USE_WATTS, 0);
 
     // mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
     // wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWiFi));
     // l.debug("created the timers");
     // show_startup("timers made");
 
-    /*
-   xTaskCreate(updateDisplayTask,
-               "updateDisplayTask",
-               10240,
-               NULL,
-               2,
-               &displayUpdateTaskHandler);
+    xTaskCreatePinnedToCore(updateDisplayTask,
+                            "updateDisplayTask",
+                            10240,
+                            NULL,
+                            2,
+                            &displayUpdateTaskHandler,
+                            1);
 
-   xTaskCreate(printLocalTimeTask,
-               "printLocalTimeTask",
-               2048,
-               NULL,
-               1,
-               &localTimeTaskHandler);
+    xTaskCreate(printLocalTimeTask,
+                "printLocalTimeTask",
+                2048,
+                NULL,
+                1,
+                &localTimeTaskHandler);
 
-   show_startup("timers running");
-    */
+    show_startup("tasks running");
 
     // Enable OTA
     setup_ota(String(CREATURE_NAME));
@@ -384,45 +398,41 @@ portTASK_FUNCTION(updateDisplayTask, pvParameters)
             if (xQueueReceive(displayQueue, &message, (TickType_t)10) == pdPASS)
             {
 
-                switch (message.type)
+                if (message.text != NULL)
                 {
-                case sl_concurrency_message:
-                    memcpy(sl_concurrency, message.text, LCD_WIDTH);
-                    break;
-                case home_event_message:
-                    memcpy(home_message, message.text, LCD_WIDTH);
-                    break;
-                case clock_display_message:
-                    memcpy(clock_display, message.text, LCD_WIDTH);
-                    break;
-                case temperature_message:
-                    memcpy(temperature, message.text, LCD_WIDTH);
+                    l.verbose("got a message: %s", message.text);
+                    switch (message.type)
+                    {
+                    case home_event_message:
+                        memcpy(home_message, message.text, LCD_WIDTH);
+                        break;
+                    case clock_display_message:
+                        memcpy(clock_display, message.text, LCD_WIDTH);
+                        break;
+                    case temperature_message:
+                        memcpy(temperature, message.text, LCD_WIDTH);
+                    }
+
+                    // The display is buffered, so this just means wipe out what's there
+                    display.clearDisplay();
+                    display.setCursor(0, 0);
+                    display.setTextSize(1);
+                    display.println("");
+                    display.println(home_message);
+                    display.println(temperature);
+                    display.println("");
+                    display.println("");
+                    display.print("          ");
+                    display.println(clock_display);
+                    display.display();
                 }
-
-                // The display is buffered, so this just means wipe out what's there
-                display.clearDisplay();
-                display.setCursor(0, 0);
-                display.setTextSize(2);
-                display.println(sl_concurrency);
-                display.setTextSize(1);
-                display.println("");
-                display.println(home_message);
-                display.println(temperature);
-                display.println("");
-                display.println("");
-                display.print("          ");
-                display.println(clock_display);
-                display.display();
-
-#ifdef CREATURE_DEBUG
-
-                l.debug("Read message from queue: type: %s, text: %s, size: %d", message.type, message.text, sizeof(message));
-#else
-                l.debug("message read from queue: %s", message.text);
-#endif
+                else
+                {
+                    l.warning("NULL message pulled from the displayQueue");
+                }
             }
         }
-        vTaskDelay(TickType_t pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -442,8 +452,7 @@ void printLocalTimeTask(void *pvParameters)
             strftime(message.text, LCD_WIDTH, "%I:%M:%S %p", &timeinfo);
 
 #ifdef CREATURE_DEBUG
-            Serial.print("Current time: ");
-            Serial.println(message.text);
+            l.verbose("Current time: %s", message.text);
 #endif
 
             // Drop this message into the queue, giving up after 500ms if there's no
