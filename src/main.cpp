@@ -31,6 +31,7 @@ extern "C"
 }
 
 #include "main.h"
+#include "config.h"
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1325.h>
@@ -77,6 +78,18 @@ char temperature[LCD_WIDTH];
 float gOutsideTemperature = 32.0;
 float gWindSpeed = 0.0;
 float gHousePower = 500.0;
+
+/*
+    Configuration!
+
+    This isn't saved anywhere on the MCU itself. All of the config is kept in a retained
+    MQTT topic, which is read when the Creature boots.
+
+    This is why where's "local" and "global" topics in MQTT. The config is local and is
+    keyed to CREATURE_NAME.
+
+*/
+boolean gDisplayOn = true;
 
 // Keep a link to our logger
 static Logger l;
@@ -188,6 +201,7 @@ void setup()
     show_startup("Starting MQTT");
     mqtt.connect(magicBroker.ipAddress, magicBroker.port);
     mqtt.subscribe(String("cmd"), 0);
+    mqtt.subscribe(String("config"), 0);
 
     mqtt.subscribeGlobalNamespace(OUTSIDE_TEMPERATURE_TOPIC, 0);
     mqtt.subscribeGlobalNamespace(OUTSIDE_WIND_SPEED_TOPIC, 0);
@@ -480,17 +494,24 @@ portTASK_FUNCTION(updateDisplayTask, pvParameters)
 
                     // The display is buffered, so this just means wipe out what's there
                     display.clearDisplay();
-                    display.setCursor(0, 0);
-                    display.setTextSize(1);
-                    display.println(home_status);
-                    display.println("");
-                    display.println(flamethrower_display);
-                    display.println(home_message);
-                    display.println(temperature);
-                    display.println("");
-                    display.println("");
-                    display.print("          ");
-                    display.println(clock_display);
+
+                    // If the display is off, don't show anything
+                    if (gDisplayOn)
+                    {
+                        display.setCursor(0, 0);
+                        display.setTextSize(1);
+                        display.println(home_status);
+                        display.println("");
+                        display.println(flamethrower_display);
+                        display.println(home_message);
+                        display.println(temperature);
+                        display.println("");
+                        display.println("");
+                        display.print("          ");
+                        display.println(clock_display);
+                    }
+
+                    // Update!
                     display.display();
                 }
                 else
@@ -547,7 +568,17 @@ portTASK_FUNCTION(messageQueueReaderTask, pvParameters)
                     message.topic,
                     message.topicGlobalNamespace,
                     message.payload);
-            display_message(message.topic, message.payload);
+
+            // Is this a config message?
+            if (strncmp("config", message.topic, strlen(message.topic)) == 0)
+            {
+                l.info("Got a config message from MQTT: %s", message.payload);
+                updateConfig(String(message.payload));
+            }
+            else
+            {
+                display_message(message.topic, message.payload);
+            }
         }
     }
 }
