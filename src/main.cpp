@@ -119,35 +119,12 @@ void show_startup(String line1)
     __show_big_message("Booting...", buffer, line1);
 }
 
-void WiFiEvent(WiFiEvent_t event)
-{
-    log_v("[WiFi-event] event: %d\n", event);
-    switch (event)
-    {
-    case SYSTEM_EVENT_WIFI_READY:
-        l.debug("wifi ready");
-        break;
-    case SYSTEM_EVENT_STA_GOT_IP:
-        l.info("WiFi connected");
-        l.info("IP address: %s", WiFi.localIP().toString().c_str());
-        show_startup(WiFi.localIP().toString());
-        break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
-        l.warning("WiFi lost connection");
-        show_error("Unable to connect to Wifi network", ":(");
-        xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
-        xTimerStart(wifiReconnectTimer, 0);
-        // onWifiDisconnect(); // Tell the broker we lost Wifi
-        break;
-    }
-}
-
 void set_up_lcd()
 {
     l.info("setting up the OLED display");
     display.begin();
     display.display();
-    delay(1000);
+    delay(250);
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(WHITE);
@@ -179,7 +156,12 @@ void setup()
 
     show_startup("starting up Wifi");
     NetworkConnection network = NetworkConnection();
-    network.connectToWiFi();
+    if (!network.connectToWiFi())
+    {
+        show_error("I can't WiFi :(", "Check provisioning!");
+        while (1)
+            ;
+    }
 
     // Create the message queue
     displayQueue = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct DisplayMessage));
@@ -404,11 +386,11 @@ void display_message(const char *topic, const char *message)
     {
         print_temperature("Workshop", message);
     }
-     else if (strncmp(GUEST_ROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+    else if (strncmp(GUEST_ROOM_TEMPERATURE_TOPIC, topic, topic_length) == 0)
     {
         print_temperature("Guest Room", message);
     }
-     else if (strncmp(KITCHEN_TEMPERATURE_TOPIC, topic, topic_length) == 0)
+    else if (strncmp(KITCHEN_TEMPERATURE_TOPIC, topic, topic_length) == 0)
     {
         print_temperature("Kitchen", message);
     }

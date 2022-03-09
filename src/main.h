@@ -36,8 +36,6 @@ struct DisplayMessage
 } __attribute__((packed));
 
 
-void WiFiEvent(WiFiEvent_t event);
-
 char *ultoa(unsigned long val, char *s);
 void set_up_lcd();
 void show_startup(String line1);
